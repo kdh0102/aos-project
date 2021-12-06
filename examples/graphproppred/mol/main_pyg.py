@@ -59,6 +59,47 @@ def eval(model, device, loader, evaluator):
 
     return evaluator.eval(input_dict)
 
+def trace():
+    batch_size = 1
+    dataset = "ogbg-molhiv"
+
+    ### automatic dataloading and splitting
+    dataset = PygGraphPropPredDataset(name = dataset)
+    split_idx = dataset.get_idx_split()
+
+    # ### automatic evaluator. takes dataset name as input
+    node_count = [0] * len(dataset)
+    edge_count = [0] * len(dataset)
+
+    train_loader = DataLoader(dataset[split_idx["train"]], batch_size=batch_size, shuffle=False)
+    valid_loader = DataLoader(dataset[split_idx["valid"]], batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(dataset[split_idx["test"]], batch_size=batch_size, shuffle=False)
+
+    for idx,batch in enumerate(train_loader):
+        node_count[split_idx["train"][idx]] = batch.x.size()[0]
+        edge_count[split_idx["train"][idx]] = batch.edge_attr.size()[0]
+    for idx,batch in enumerate(valid_loader):
+        node_count[split_idx["valid"][idx]] = batch.x.size()[0]
+        edge_count[split_idx["valid"][idx]] = batch.edge_attr.size()[0]
+    for idx,batch in enumerate(test_loader):
+        node_count[split_idx["test"][idx]] = batch.x.size()[0]
+        edge_count[split_idx["test"][idx]] = batch.edge_attr.size()[0]
+
+    node_start = [0] + node_count
+    edge_start = [0] + edge_count
+
+    for i in range(len(node_start)-1):
+        node_start[i+1] += node_start[i]
+    for i in range(len(edge_start)-1):
+        edge_start[i+1] += edge_start[i]
+
+    y = dataset.data.y.numpy()
+
+    file = open("trace.txt", "w")
+    print("# graph_idx node_start node_count edge_start edge_count y_value", file=file)
+    for idx in split_idx["test"].numpy():
+        print(idx, node_start[idx], node_count[idx], edge_start[idx], edge_count[idx], y[idx][0], sep="\t", file=file)
+  
 
 def main():
     # Training settings
@@ -170,3 +211,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # trace()
