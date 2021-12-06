@@ -93,6 +93,12 @@ def main():
     ### automatic dataloading and splitting
     dataset = PygGraphPropPredDataset(name = args.dataset)
 
+    #np.savetxt('data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
+    #np.savetxt('data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
+    #np.savetxt('data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
+    #np.savetxt('data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
+    #np.savetxt('data.y.txt', dataset.data.y.numpy(), fmt='%i')
+
     if args.feature == 'full':
         pass 
     elif args.feature == 'simple':
@@ -102,6 +108,10 @@ def main():
         dataset.data.edge_attr = dataset.data.edge_attr[:,:2]
 
     split_idx = dataset.get_idx_split()
+
+    #np.savetxt('train_idx.txt', split_idx["train"].numpy(), fmt='%i')
+    #np.savetxt('valid_idx.txt', split_idx["valid"].numpy(), fmt='%i')
+    #np.savetxt('test_idx.txt', split_idx["test"].numpy(), fmt='%i')
 
     ### automatic evaluator. takes dataset name as input
     evaluator = Evaluator(args.dataset)

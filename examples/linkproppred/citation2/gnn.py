@@ -12,6 +12,7 @@ from ogb.linkproppred import PygLinkPropPredDataset, Evaluator
 
 from logger import Logger
 
+import numpy as np
 
 class GCN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers,
@@ -220,6 +221,16 @@ def main():
         deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
         adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
         data.adj_t = adj_t
+
+    #np.savetxt('embedding.txt', data.x.numpy())
+    #np.savetxt('adjacent_row.txt', data.adj_t.coo()[0].numpy(), fmt='%i')
+    #np.savetxt('adjacent_col.txt', data.adj_t.coo()[1].numpy(), fmt='%i')
+    #np.savetxt('train_idx_source.txt', split_edge['train']['source_node'].numpy(), fmt='%i')
+    #np.savetxt('train_idx_source.txt', split_edge['train']['target_node'].numpy(), fmt='%i')
+    #np.savetxt('valid_idx_source.txt', split_edge['valid']['source_node'].numpy(), fmt='%i')
+    #np.savetxt('valid_idx_target.txt', split_edge['valid']['target_node'].numpy(), fmt='%i')
+    #np.savetxt('test_idx_source.txt', split_edge['test']['source_node'].numpy(), fmt='%i')
+    #np.savetxt('test_idx_traget.txt', split_edge['test']['target_node'].numpy(), fmt='%i')
 
     predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
                               args.num_layers, args.dropout).to(device)

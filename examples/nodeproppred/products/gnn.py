@@ -10,6 +10,7 @@ from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
 
 from logger import Logger
 
+import numpy as np
 
 class GCN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers,
@@ -124,6 +125,13 @@ def main():
 
     split_idx = dataset.get_idx_split()
     train_idx = split_idx['train'].to(device)
+
+    #np.savetxt('embedding.txt', data.x.numpy())
+    #np.savetxt('adjacent_row.txt', data.adj_t.coo()[0].numpy(), fmt='%i')
+    #np.savetxt('adjacent_col.txt', data.adj_t.coo()[1].numpy(), fmt='%i')
+    #np.savetxt('train_idx.txt', split_idx['train'].numpy(), fmt='%i')
+    #np.savetxt('valid_idx.txt', split_idx['valid'].numpy(), fmt='%i')
+    #np.savetxt('test_idx.txt', split_idx['test'].numpy(), fmt='%i')
 
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
