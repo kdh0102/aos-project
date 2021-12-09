@@ -5,17 +5,20 @@ from typing import List
 
 @dataclass
 class IOEvent:
-    """
-    A class to represent an IO event.
+    """A class to represent an IO event."""
 
-    offset(int): Where to start the event from the file (bytes).
-    size(int): The number of bytes of the event.
-    type(str): The type of the event (e.g., read, write).
+    @classmethod
+    def from_trace(cls, items: List[str]):
+        return cls(*[int(item) for item in items])
 
-    """
-    offset: int
-    size: int
-    type: str
+@dataclass
+class MolIOEvent(IOEvent):
+    graph_idx: int
+    node_start: int
+    node_count: int
+    edge_start: int
+    edge_count: int
+    y_value: int
 
 
 @dataclass
@@ -53,14 +56,21 @@ class Trace:
             trace_file(str): The trace file path.
             
         """
-        traces = cls()
+        events = []
         try:
             with open(trace_file, "r") as f:
-                pass
+                while True:
+                    line = f.readline()
+                    if not line:
+                        break
+                    # The first line contains `#` in the beginning.
+                    if "#" in line:
+                        continue
+                    events.append(MolIOEvent.from_trace(line.split("\t")))
         except:
             raise FileExistsError(f"Trace file({file_name}) does not exist.")
 
-        return traces
+        return cls(events)
 
 
 if __name__ == "__main__":
@@ -71,4 +81,4 @@ if __name__ == "__main__":
     trace_file = sys.argv[2]
 
     trace = Trace.parse_trace_file(trace_file)
-    trace.simulate(file_name)
+    # trace.simulate(file_name)
