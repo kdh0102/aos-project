@@ -59,14 +59,7 @@ def eval(model, device, loader, evaluator):
 
     return evaluator.eval(input_dict)
 
-def trace():
-    batch_size = 1
-    dataset = "ogbg-molhiv"
-
-    ### automatic dataloading and splitting
-    dataset = PygGraphPropPredDataset(name = dataset)
-    split_idx = dataset.get_idx_split()
-
+def trace(dataset, split_idx, batch_size = 1):
     # ### automatic evaluator. takes dataset name as input
     node_count = [0] * len(dataset)
     edge_count = [0] * len(dataset)
@@ -142,6 +135,7 @@ def main():
     parser.add_argument('--filename', type=str, default="",
                         help='filename to output result (default: )')
     parser.add_argument('--save_trace', action="store_true", help='save data trace')
+    parser.add_argument('--run_trace', action="store_true", help='run data trace')
     args = parser.parse_args()
 
     device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
@@ -162,6 +156,9 @@ def main():
     if args.save_trace:
         save_data(dataset)
         save_split_idx(split_idx)
+
+    if args.run_trace:
+        return trace(dataset, split_idx)
 
     ### automatic evaluator. takes dataset name as input
     evaluator = Evaluator(args.dataset)
@@ -220,4 +217,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # trace()
