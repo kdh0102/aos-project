@@ -63,12 +63,12 @@ class Trace:
                     line = f.readline()
                     if not line:
                         break
-                    # The first line contains `#` in the beginning.
+                    # Assumption: The first line contains `#` in the beginning.
                     if "#" in line:
                         continue
                     events.append(MolIOEvent.from_trace(line.split("\t")))
         except:
-            raise FileExistsError(f"Trace file({file_name}) does not exist.")
+            raise FileExistsError(f"Trace file({trace_file}) does not exist.")
 
         return cls(events)
 
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise Exception("The arguments should include 1)file path and 2)trace file.")
 
-    file_name = sys.argv[1]
-    trace_file = sys.argv[2]
+    trace_file = sys.argv[1]
+    data_file_path = sys.argv[2]
 
     trace = Trace.parse_trace_file(trace_file)
-    # trace.simulate(file_name)
+    trace.simulate(data_file_path)
