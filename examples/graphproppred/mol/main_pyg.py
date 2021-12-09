@@ -6,8 +6,8 @@ from gnn import GNN
 
 from tqdm import tqdm
 import argparse
-import time
 import numpy as np
+from pathlib import Path
 
 ### importing OGB
 from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
@@ -101,6 +101,20 @@ def trace():
         print(idx, node_start[idx], node_count[idx], edge_start[idx], edge_count[idx], y[idx][0], sep="\t", file=file)
   
 
+def save_data(dataset, base_path = Path(".")):
+    np.savetxt(base_path / 'data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
+    np.savetxt(base_path / 'data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
+    np.savetxt(base_path / 'data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
+    np.savetxt(base_path / 'data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
+    np.savetxt(base_path / 'data.y.txt', dataset.data.y.numpy(), fmt='%i')
+
+
+def save_split_idx(split_idx, base_path = Path(".")):
+    np.savetxt(base_path / 'train_idx.txt', split_idx["train"].numpy(), fmt='%i')
+    np.savetxt(base_path / 'valid_idx.txt', split_idx["valid"].numpy(), fmt='%i')
+    np.savetxt(base_path / 'test_idx.txt', split_idx["test"].numpy(), fmt='%i')
+
+
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='GNN baselines on ogbgmol* data with Pytorch Geometrics')
@@ -127,18 +141,13 @@ def main():
                         help='full feature or simple feature')
     parser.add_argument('--filename', type=str, default="",
                         help='filename to output result (default: )')
+    parser.add_argument('--save_trace', action="store_true", help='save data trace')
     args = parser.parse_args()
 
     device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
 
     ### automatic dataloading and splitting
     dataset = PygGraphPropPredDataset(name = args.dataset)
-
-    #np.savetxt('data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
-    #np.savetxt('data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
-    #np.savetxt('data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
-    #np.savetxt('data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
-    #np.savetxt('data.y.txt', dataset.data.y.numpy(), fmt='%i')
 
     if args.feature == 'full':
         pass 
@@ -150,9 +159,9 @@ def main():
 
     split_idx = dataset.get_idx_split()
 
-    #np.savetxt('train_idx.txt', split_idx["train"].numpy(), fmt='%i')
-    #np.savetxt('valid_idx.txt', split_idx["valid"].numpy(), fmt='%i')
-    #np.savetxt('test_idx.txt', split_idx["test"].numpy(), fmt='%i')
+    if args.save_trace:
+        save_data(dataset)
+        save_split_idx(split_idx)
 
     ### automatic evaluator. takes dataset name as input
     evaluator = Evaluator(args.dataset)
