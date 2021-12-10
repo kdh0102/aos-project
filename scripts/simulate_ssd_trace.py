@@ -1,7 +1,21 @@
 import sys
 from dataclasses import dataclass, field
 from typing import List
+from pathlib import Path
 
+
+SPLIT_FILES = {
+    "test": "test_idx.txt",
+    "train": "train_idx.txt",
+    "test": "test_idx.txt"
+}
+
+DATA_TRACE_FILES = {
+    "x": "data.x.txt",
+    "y": "data.y.txt",
+    "edge_index": "data.edge_index.txt",
+    "edge_index_row": "data.edge_index_row.txt"
+}
 
 @dataclass
 class IOEvent:
@@ -21,29 +35,32 @@ class MolIOEvent(IOEvent):
     y_value: int
 
 
+def sanity_check(data_file_path: Path):
+    for file in {**SPLIT_FILES, **DATA_TRACE_FILES}.values():
+        assert((data_file_path / file).exists())
+
+
 @dataclass
 class Trace:
     events: List[IOEvent] = field(default_factory=list)
 
-    def simulate(self, file_name: str):
+    def simulate(self, data_file_path: Path):
         """Run simulation on the stoarge.
 
         Args:
-            file_name(str): The data file name. Make sure the file is located in the storage
-                            that you want to simulate.
+            data_file_path(Path): The data file path. Make sure the file is located in the storage
+                                  that you want to simulate.
 
         """
-        try:
-            with open(file_name, "r") as f:
-                for event in self.events:
-                    f.seek(event.offset)
-                    if event.type == "r":
-                        f.read(event.size)
-                    else:
-                        raise NotImplemented
-
-        except:
-            raise FileExistsError(f"{file_name} does not exist.")
+        sanity_check(data_file_path)
+        return
+        with open(file_name, "r") as f:
+            for event in self.events:
+                f.seek(event.offset)
+                if event.type == "r":
+                    f.read(event.size)
+                else:
+                    raise NotImplemented
 
 
     @classmethod
@@ -75,10 +92,10 @@ class Trace:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise Exception("The arguments should include 1)file path and 2)trace file.")
+        raise Exception("The arguments should include 1)trace file and 2)data file path.")
 
     trace_file = sys.argv[1]
     data_file_path = sys.argv[2]
 
     trace = Trace.parse_trace_file(trace_file)
-    trace.simulate(data_file_path)
+    trace.simulate(Path(data_file_path))
