@@ -13,6 +13,7 @@ SPLIT_FILES = {
 DATA_TRACE_FILES = {
     "x": "data.x.txt",
     "y": "data.y.txt",
+    "edge_attr": "data.edge_attr.txt",
     "edge_index": "data.edge_index.txt",
     "edge_index_row": "data.edge_index_row.txt"
 }
@@ -40,12 +41,29 @@ def sanity_check(data_file_path: Path):
         assert((data_file_path / file).exists())
 
 
+def open_data_trace_files(data_file_path):
+    handlers = {}
+    for key, fname in DATA_TRACE_FILES.items():
+        handlers[key] = open(data_file_path / fname, "r")
+
+    return handlers
+
+
+def get_sentence_len(handlers):
+    sentence_len = {}
+    for key, file_handler in handlers.items():
+        sentence_len[key] = len(file_handler.readline())
+        file_handler.seek(0)
+
+    return sentence_len
+
+
 @dataclass
 class Trace:
-    events: List[IOEvent] = field(default_factory=list)
+    events: List[MolIOEvent] = field(default_factory=list)
 
     def simulate(self, data_file_path: Path):
-        """Run simulation on the stoarge.
+        """Run simulation on the stoarge for mol dataset.
 
         Args:
             data_file_path(Path): The data file path. Make sure the file is located in the storage
@@ -53,14 +71,16 @@ class Trace:
 
         """
         sanity_check(data_file_path)
-        return
-        with open(file_name, "r") as f:
-            for event in self.events:
-                f.seek(event.offset)
-                if event.type == "r":
-                    f.read(event.size)
-                else:
-                    raise NotImplemented
+        file_handlers = open_data_trace_files(data_file_path)
+        sentence_len = get_sentence_len(file_handlers)
+
+        file_x = file_handlers["x"]
+        len_x = sentence_len["x"]
+
+        for event in self.events:
+            # Read node.x file
+            file_x.seek(event.node_start * len_x)
+            file_x.read(event.node_count * len_x)
 
 
     @classmethod
