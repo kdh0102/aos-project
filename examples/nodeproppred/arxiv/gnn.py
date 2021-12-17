@@ -14,6 +14,7 @@ import numpy as np
 from torch_sparse import SparseTensor, matmul, fill_diag, sum as sparsesum, mul
 from torch import Tensor
 import time
+from cupy.cuda import nvtx
 
 def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
              add_self_loops=True, dtype=None):
@@ -76,7 +77,7 @@ class GCN(torch.nn.Module):
         for bn in self.bns:
             bn.reset_parameters()
 
-    # original: gcn_norm included
+    ## gcn_norm is done in advance
     def forward(self, x, adj_t):
         for conv in self.convs:
             conv.normalize = False
@@ -197,8 +198,8 @@ def inference():
     #     print(" ".join(neighbors), file=out)
     # sys.exit()
 
-    data.adj_t = data.adj_t.to(device)
-
+    # data.adj_t = data.adj_t.to(device)
+    nvtx.RangePush("Model init")
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
                      dataset.num_classes, args.num_layers,
@@ -213,6 +214,7 @@ def inference():
 
     evaluator = Evaluator(name='ogbn-arxiv')
     model.eval()
+    nvtx.RangePop()
     
     ## load 3-hop neighbors and run test
     three_hop = open("three-hop.txt", "r")
@@ -233,21 +235,28 @@ def inference():
         node_idx = int(node.numpy())
         internal_idx = neighbors_list.index(node_idx)
 
+        nvtx.RangePush("Start One Node")
+        x_sub = x_sub.to(device)
+        adj_t_sub = adj_t_sub.to(device)
         t1 = time.time()
-        out = model(x_sub.to(device), adj_t_sub.to(device))
+        out = model(x_sub, adj_t_sub)
         total_latency += (time.time() - t1)
+        nvtx.RangePop()
+        nvtx.RangePush("Argmax")
         y_preds.append(int(out.argmax(dim=-1, keepdim=True)[internal_idx].cpu().numpy()))
-
-        if idx == 9999:
+        nvtx.RangePop()
+        if idx == 99:
             break
 
+    nvtx.RangePush("Eval")
     test_acc = evaluator.eval({
-        'y_true': data.y[split_idx['test'][:10000]],
+        'y_true': data.y[split_idx['test'][:100]],
         'y_pred': torch.tensor(y_preds).view(-1, 1),
     })['acc']
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/10000))
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))
+    nvtx.RangePop()
 
 def main():
     parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
@@ -320,6 +329,6 @@ def main():
 if __name__ == "__main__":
     global total_nodes
     total_nodes = 169343
-    main()
+    # main()
     inference()
     
