@@ -1,4 +1,6 @@
 import sys
+from multiprocessing import Process
+from subprocess import call
 from dataclasses import dataclass, field
 from typing import List
 from pathlib import Path
@@ -18,6 +20,8 @@ DATA_TRACE_FILES = {
     "edge_index_row": "data.edge_index_row.txt"
 }
 
+STORAGE = "/dev/nvme0n1"
+
 @dataclass
 class IOEvent:
     """A class to represent an IO event."""
@@ -34,6 +38,30 @@ class MolIOEvent(IOEvent):
     edge_start: int
     edge_count: int
     y_value: int
+
+
+@dataclass
+class Blktrace:
+    BLKTRACE = "blktrace"
+
+    @staticmethod
+    def run() -> Process:
+        def call_blktrace():
+            call(["sudo", Blktrace.BLKTRACE, "-d", STORAGE])
+
+        p = Process(target=call_blktrace, daemon=True)
+        return p
+
+
+def record_blktrace(func):
+    def blktrace(*args, **kwargs):
+        p = Blktrace.run()
+        p.start()
+        result = func(*args, **kwargs)
+        p.kill()
+        p.join()
+        return result
+    return blktrace
 
 
 def sanity_check(data_file_path: Path):
@@ -62,8 +90,9 @@ def get_sentence_len(handlers):
 class Trace:
     events: List[MolIOEvent] = field(default_factory=list)
 
+    @record_blktrace
     def simulate(self, data_file_path: Path):
-        """Run simulation on the stoarge for mol dataset.
+        """Run simulation on the storage for mol dataset.
 
         Args:
             data_file_path(Path): The data file path. Make sure the file is located in the storage
@@ -77,10 +106,13 @@ class Trace:
         file_x = file_handlers["x"]
         len_x = sentence_len["x"]
 
+        # file_edge = file_handlers["edge_attr"]
+        # len_edge = sentence_len["edge_attr"]
+
         for event in self.events:
             # Read node.x file
             file_x.seek(event.node_start * len_x)
-            file_x.read(event.node_count * len_x)
+            data = file_x.read(event.node_count * len_x)
 
 
     @classmethod
