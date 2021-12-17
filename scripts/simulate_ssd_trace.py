@@ -172,6 +172,7 @@ class Trace:
 def dump_event_stats(event_times):
     print(f"# Events: {len(event_times)}")
     print(f"Avg Event Duration(ns): {sum(event_times) / len(event_times)}")
+    print(f"Total Event Duration(ms): {sum(event_times) / 1e6}")
 
 
 if __name__ == "__main__":
