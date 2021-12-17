@@ -13,6 +13,8 @@ from ogb.linkproppred import PygLinkPropPredDataset, Evaluator
 from logger import Logger
 
 import numpy as np
+import tensorflow as tf
+import sys, time
 
 class GCN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers,
@@ -21,12 +23,12 @@ class GCN(torch.nn.Module):
 
         self.convs = torch.nn.ModuleList()
         self.convs.append(
-            GCNConv(in_channels, hidden_channels, normalize=False))
+            GCNConv(in_channels, hidden_channels, normalize=False, cached=False))
         for _ in range(num_layers - 2):
             self.convs.append(
-                GCNConv(hidden_channels, hidden_channels, normalize=False))
+                GCNConv(hidden_channels, hidden_channels, normalize=False, cached=False))
         self.convs.append(
-            GCNConv(hidden_channels, out_channels, normalize=False))
+            GCNConv(hidden_channels, out_channels, normalize=False, cached=False))
 
         self.dropout = dropout
 
@@ -136,37 +138,168 @@ def train(model, predictor, data, split_edge, optimizer, batch_size):
 def test(model, predictor, data, split_edge, evaluator, batch_size):
     predictor.eval()
 
+    t1 = time.time()
     h = model(data.x, data.adj_t)
+    
+    print("Original model latency: %.5fs" % (time.time()-t1))
 
     def test_split(split):
-        source = split_edge[split]['source_node'].to(h.device)
-        target = split_edge[split]['target_node'].to(h.device)
-        target_neg = split_edge[split]['target_node_neg'].to(h.device)
+        source = split_edge[split]['source_node'].to(h.device)[:num_edge_to_test]
+        target = split_edge[split]['target_node'].to(h.device)[:num_edge_to_test]
+        target_neg = split_edge[split]['target_node_neg'].to(h.device)[:num_edge_to_test][:, 0]
 
         pos_preds = []
         for perm in DataLoader(range(source.size(0)), batch_size):
             src, dst = source[perm], target[perm]
             pos_preds += [predictor(h[src], h[dst]).squeeze().cpu()]
         pos_pred = torch.cat(pos_preds, dim=0)
-
+        
         neg_preds = []
-        source = source.view(-1, 1).repeat(1, 1000).view(-1)
-        target_neg = target_neg.view(-1)
-        for perm in DataLoader(range(source.size(0)), batch_size):
+
+        for perm in DataLoader(range(source.size(0)), batch_size):    
             src, dst_neg = source[perm], target_neg[perm]
             neg_preds += [predictor(h[src], h[dst_neg]).squeeze().cpu()]
-        neg_pred = torch.cat(neg_preds, dim=0).view(-1, 1000)
-
+        neg_pred = torch.cat(neg_preds, dim=0).view(-1, 1)
+        
         return evaluator.eval({
             'y_pred_pos': pos_pred,
             'y_pred_neg': neg_pred,
         })['mrr_list'].mean().item()
 
-    train_mrr = test_split('eval_train')
-    valid_mrr = test_split('valid')
+    # train_mrr = test_split('eval_train')
+    # valid_mrr = test_split('valid')
     test_mrr = test_split('test')
 
-    return train_mrr, valid_mrr, test_mrr
+    return -1, -1, test_mrr
+    SparseTensor(row=[], col=[], sparse_sizes=(1, 2))
+
+@torch.no_grad()
+def inference():
+    parser = argparse.ArgumentParser(description='OGBL-Citation2 (GNN)')
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--log_steps', type=int, default=1)
+    parser.add_argument('--use_sage', action='store_true')
+    parser.add_argument('--num_layers', type=int, default=3)
+    parser.add_argument('--hidden_channels', type=int, default=256)
+    parser.add_argument('--dropout', type=float, default=0)
+    parser.add_argument('--batch_size', type=int, default=64 * 1024)
+    parser.add_argument('--lr', type=float, default=0.0005)
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--eval_steps', type=int, default=1)
+    parser.add_argument('--runs', type=int, default=10)
+    args = parser.parse_args()
+    print(args)
+
+    # device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
+    device = torch.device(device)
+
+    dataset = PygLinkPropPredDataset(name='ogbl-citation2',
+                                     transform=T.ToSparseTensor())
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_edge = dataset.get_edge_split()
+
+    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
+    source_node = set(source_node_list)
+    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
+    target_node = set(target_node_list)
+    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
+    target_neg = set(target_neg_list)
+    nodes = source_node.union(target_node)
+    nodes = list(nodes.union(target_neg))
+    nodes.sort()
+
+    # save 3-hop neighbors
+    # adj = data.adj_t.set_diag()
+    # print(adj)
+    # two_hop = adj[nodes].matmul(adj)
+    # print(two_hop)
+    # three_hop = two_hop.matmul(adj)
+    # print(three_hop)
+
+    # out = open("three-hop.txt", "w")
+    # for (src, dst, neg) in zip(source_node_list, target_node_list, target_neg_list):
+    #     src_i = nodes.index(src)
+    #     dst_i = nodes.index(dst)
+    #     neg_i = nodes.index(neg)
+    #     neighbors = set(map(int, three_hop[src_i].coo()[1].numpy()))
+    #     neighbors = neighbors.union(set(map(int, three_hop[dst_i].coo()[1].numpy())))
+    #     neighbors = neighbors.union(set(map(int, three_hop[neg_i].coo()[1].numpy())))
+    #     neighbors_list = list(neighbors)
+    #     neighbors_list.sort()
+    #     nlist = list(map(str, neighbors_list))
+    #     print(" ".join(nlist), file=out)
+    # sys.exit()
+
+    predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
+                              args.num_layers, args.dropout).to(device)
+    if args.use_sage:
+        model = SAGE(data.num_features, args.hidden_channels,
+                     args.hidden_channels, args.num_layers,
+                     args.dropout).to(device)
+        model.load_state_dict(torch.load("model-sage.pt"))
+        predictor.load_state_dict(torch.load("predictor-sage.pt"))
+    else:
+        model = GCN(data.num_features, args.hidden_channels,
+                    args.hidden_channels, args.num_layers,
+                    args.dropout).to(device)
+        model.load_state_dict(torch.load("model.pt"))
+        predictor.load_state_dict(torch.load("predictor.pt"))
+
+        # Pre-compute GCN normalization.
+        adj_t = data.adj_t.set_diag()
+        deg = adj_t.sum(dim=1).to(torch.float)
+        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+        adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
+        data.adj_t = adj_t
+    
+    
+    predictor.eval()
+
+    evaluator = Evaluator(name='ogbl-citation2')
+    
+
+    ## load 3-hop neighbors and run test
+    three_hop = open("three-hop.txt", "r")
+    lines = three_hop.readlines()
+    pos_preds = []
+    neg_preds = []
+    
+    total_latency = 0.0
+    for idx, (src, dst, neg, line) in enumerate(zip(source_node_list, target_node_list, target_neg_list, lines)):
+        neighbors_list = list(map(int, line.strip().split(" ")))
+        count = len(neighbors_list)
+        neighbors = torch.tensor(neighbors_list)
+        
+        x_sub = torch.zeros(count, data.num_features)
+        x_sub[:count] = data.x[neighbors]
+
+        adj_t_sub = data.adj_t[neighbors][:, neighbors]
+    
+        src_i = neighbors_list.index(src)
+        dst_i = neighbors_list.index(dst)
+        neg_i = neighbors_list.index(neg)
+
+        x_sub = x_sub.to(device)
+        adj_t_sub = adj_t_sub.to(device)
+        t1 = time.time()
+        out = model(x_sub, adj_t_sub)
+        total_latency += (time.time() - t1)
+        pos_preds += [predictor(out[src_i], out[dst_i]).cpu()]
+        neg_preds += [predictor(out[src_i], out[neg_i]).cpu()]
+
+    pos_pred = torch.cat(pos_preds, dim=0)
+    neg_pred = torch.cat(neg_preds, dim=0).view(-1, 1)
+
+    test_acc = evaluator.eval({
+        'y_pred_pos': pos_pred,
+        'y_pred_neg': neg_pred,
+    })['mrr_list'].mean().item()
+    print("1-node inference acc: %.5f" % test_acc)
+    print("1-node inference total latency: %.5fs" % (total_latency))
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))
 
 
 def main():
@@ -186,6 +319,7 @@ def main():
     print(args)
 
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    # device = 'cpu'
     device = torch.device(device)
 
     dataset = PygLinkPropPredDataset(name='ogbl-citation2',
@@ -197,22 +331,30 @@ def main():
     split_edge = dataset.get_edge_split()
 
     # We randomly pick some training samples that we want to evaluate on:
-    torch.manual_seed(12345)
-    idx = torch.randperm(split_edge['train']['source_node'].numel())[:86596]
-    split_edge['eval_train'] = {
-        'source_node': split_edge['train']['source_node'][idx],
-        'target_node': split_edge['train']['target_node'][idx],
-        'target_node_neg': split_edge['valid']['target_node_neg'],
-    }
+    # torch.manual_seed(12345)
+    # idx = torch.randperm(split_edge['train']['source_node'].numel())[:86596]
+    # split_edge['eval_train'] = {
+    #     'source_node': split_edge['train']['source_node'][idx],
+    #     'target_node': split_edge['train']['target_node'][idx],
+    #     'target_node_neg': split_edge['valid']['target_node_neg'],
+    # }
+
+    predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
+                              args.num_layers, args.dropout).to(device)
+    
 
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
                      args.hidden_channels, args.num_layers,
                      args.dropout).to(device)
+        model.load_state_dict(torch.load("model-sage.pt"))
+        predictor.load_state_dict(torch.load("predictor-sage.pt"))
     else:
         model = GCN(data.num_features, args.hidden_channels,
                     args.hidden_channels, args.num_layers,
                     args.dropout).to(device)
+        model.load_state_dict(torch.load("model.pt"))
+        predictor.load_state_dict(torch.load("predictor.pt"))
 
         # Pre-compute GCN normalization.
         adj_t = data.adj_t.set_diag()
@@ -232,43 +374,49 @@ def main():
     #np.savetxt('test_idx_source.txt', split_edge['test']['source_node'].numpy(), fmt='%i')
     #np.savetxt('test_idx_traget.txt', split_edge['test']['target_node'].numpy(), fmt='%i')
 
-    predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
-                              args.num_layers, args.dropout).to(device)
-
+    
     evaluator = Evaluator(name='ogbl-citation2')
-    logger = Logger(args.runs, args)
-
-    for run in range(args.runs):
-        model.reset_parameters()
-        predictor.reset_parameters()
-        optimizer = torch.optim.Adam(
-            list(model.parameters()) + list(predictor.parameters()),
-            lr=args.lr)
-
-        for epoch in range(1, 1 + args.epochs):
-            loss = train(model, predictor, data, split_edge, optimizer,
-                         args.batch_size)
-            print(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}')
-
-            if epoch % args.eval_steps == 0:
-                result = test(model, predictor, data, split_edge, evaluator,
+    _, _, test_acc = test(model, predictor, data, split_edge, evaluator,
                               args.batch_size)
-                logger.add_result(run, result)
+    print("Original model acc: %.5f" % test_acc)
+    # logger = Logger(args.runs, args)
 
-                if epoch % args.log_steps == 0:
-                    train_mrr, valid_mrr, test_mrr = result
-                    print(f'Run: {run + 1:02d}, '
-                          f'Epoch: {epoch:02d}, '
-                          f'Loss: {loss:.4f}, '
-                          f'Train: {train_mrr:.4f}, '
-                          f'Valid: {valid_mrr:.4f}, '
-                          f'Test: {test_mrr:.4f}')
+    # for run in range(args.runs):
+    #     model.reset_parameters()
+    #     predictor.reset_parameters()
+    #     optimizer = torch.optim.Adam(
+    #         list(model.parameters()) + list(predictor.parameters()),
+    #         lr=args.lr)
 
-        print('GraphSAGE' if args.use_sage else 'GCN')
-        logger.print_statistics(run)
-    print('GraphSAGE' if args.use_sage else 'GCN')
-    logger.print_statistics()
+    #     for epoch in range(1, 1 + args.epochs):
+    #         loss = train(model, predictor, data, split_edge, optimizer,
+    #                      args.batch_size)
+    #         print(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}')
+
+    #         # if epoch % args.eval_steps == 0:
+    #         result = test(model, predictor, data, split_edge, evaluator,
+    #                           args.batch_size)
+    #             # logger.add_result(run, result)
+
+    #             # if epoch % args.log_steps == 0:
+    #         train_mrr, valid_mrr, test_mrr = result
+    #         print(f'Run: {run + 1:02d}, '
+    #                       f'Epoch: {epoch:02d}, '
+    #                       f'Loss: {loss:.4f}, '
+    #                       f'Train: {train_mrr:.4f}, '
+    #                       f'Valid: {valid_mrr:.4f}, '
+    #                       f'Test: {test_mrr:.4f}')
+    #     torch.save(model.state_dict(), "model.pt")
+    #     torch.save(predictor.state_dict(), "predictor.pt")
+
+    #     print('GraphSAGE' if args.use_sage else 'GCN')
+    #     logger.print_statistics(run)
+    # print('GraphSAGE' if args.use_sage else 'GCN')
+    # logger.print_statistics()
 
 
 if __name__ == "__main__":
+    global num_edge_to_test
+    num_edge_to_test = 2
     main()
+    inference()
