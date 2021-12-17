@@ -17,7 +17,8 @@ DATA_TRACE_FILES = {
     "y": "data.y.txt",
     "edge_attr": "data.edge_attr.txt",
     "edge_index": "data.edge_index.txt",
-    "edge_index_row": "data.edge_index_row.txt"
+    "edge_index_row": "data.edge_index_row.txt",
+    "edge_index_col": "data.edge_index_col.txt"
 }
 
 STORAGE = "/dev/nvme0n1"
@@ -90,7 +91,6 @@ def get_sentence_len(handlers):
 class Trace:
     events: List[MolIOEvent] = field(default_factory=list)
 
-    @record_blktrace
     def simulate(self, data_file_path: Path):
         """Run simulation on the storage for mol dataset.
 
@@ -103,16 +103,24 @@ class Trace:
         file_handlers = open_data_trace_files(data_file_path)
         sentence_len = get_sentence_len(file_handlers)
 
-        file_x = file_handlers["x"]
-        len_x = sentence_len["x"]
-
-        # file_edge = file_handlers["edge_attr"]
-        # len_edge = sentence_len["edge_attr"]
+        handler_x, len_x = file_handlers["x"], sentence_len["x"]
+        handler_edge_attr, len_edge_attr = file_handlers["edge_attr"], sentence_len["edge_attr"]
+        handler_edge_index_row, len_edge_index_row = file_handlers["edge_index_row"], sentence_len["edge_index_row"]
+        handler_edge_index_col, len_edge_index_col = file_handlers["edge_index_col"], sentence_len["edge_index_col"]
 
         for event in self.events:
             # Read node.x file
-            file_x.seek(event.node_start * len_x)
-            data = file_x.read(event.node_count * len_x)
+            handler_x.seek(event.node_start * len_x)
+            data_x = handler_x.read(event.node_count * len_x)
+
+            handler_edge_attr.seek(event.edge_start * len_edge_attr)
+            data_edge_attr = handler_edge_attr.read(event.edge_count * len_edge_attr)
+
+            handler_edge_index_row.seek(event.edge_start * len_edge_index_row)
+            data_edge_index_row = handler_edge_index_row.read(event.edge_count * len_edge_index_row)
+
+            handler_edge_index_col.seek(event.edge_start * len_edge_index_col)
+            data_edge_index_col = handler_edge_index_col.read(event.edge_count * len_edge_index_col)
 
 
     @classmethod
