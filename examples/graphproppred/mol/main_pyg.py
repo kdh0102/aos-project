@@ -98,6 +98,7 @@ def save_data(dataset, base_path = Path(".")):
     np.savetxt(base_path / 'data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
     np.savetxt(base_path / 'data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
     np.savetxt(base_path / 'data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
+    np.savetxt(base_path / 'data.edge_index_col.txt', dataset.data.edge_index[1].numpy(), fmt='%i')
     np.savetxt(base_path / 'data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
     np.savetxt(base_path / 'data.y.txt', dataset.data.y.numpy(), fmt='%i')
 
