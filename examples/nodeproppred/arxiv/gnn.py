@@ -14,7 +14,10 @@ import numpy as np
 from torch_sparse import SparseTensor, matmul, fill_diag, sum as sparsesum, mul
 from torch import Tensor
 import time
+import copy
 from cupy.cuda import nvtx
+from reorganize import *
+from save_features import *
 
 def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
              add_self_loops=True, dtype=None):
@@ -172,7 +175,6 @@ def inference():
     print(args)
 
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
-    # device = 'cpu'
     device = torch.device(device)
 
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
@@ -180,26 +182,48 @@ def inference():
 
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
-    # data = data.to(device)
+    num_nodes = data.adj_t.size(0)
     split_idx = dataset.get_idx_split()
 
+    sorted_degree_path = "sorted_degree.txt"
+    reverse_sorted_degree_path = "reverse_sorted_degree.txt"
+    working_set_path = "two-hop.txt"
+    threshold = 100
+    low = 10
+
+    #new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, reverse_sorted_degree_path, working_set_path,
+    #                                num_nodes, threshold, low)
+
+    topk = 20
+    new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk)
+    if functionality_check(new_index_sorted, num_nodes):
+        save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
+
     ## save 3-hop neighbors
-    # adj = data.adj_t.set_diag()
+    #adj = data.adj_t.set_diag()
     # print(adj)
-    # two_hop = adj.matmul(adj)
+    #two_hop = adj.matmul(adj)
     # print(two_hop)
     # three_hop = two_hop.matmul(adj)
     # print(three_hop)
 
-    # out = open("three-hop.txt", "w")
-    # for node in split_idx['test']:
-    #     node_idx = int(node.numpy())
-    #     neighbors = list(map(str, three_hop[node_idx].coo()[1].numpy()))
-    #     print(" ".join(neighbors), file=out)
-    # sys.exit()
+    # Save original data
+    #save_raw("adj_t.txt", data.adj_t, num_nodes)
+    #save_raw("adj_t.txt", data.adj_t, num_nodes, split_idx['test'])
+    #save_raw("two-hop.txt", two_hop, num_nodes)
+    #save_raw("three-hop.txt", three_hop, num_nodes, split_idx['test'])
 
-    # data.adj_t = data.adj_t.to(device)
-    nvtx.RangePush("Model init")
+    # Save sorted/reverse sorted degree
+    '''degree = []
+    for i in range(num_nodes):
+        degree.append( (i, data.adj_t[i].nnz()) )
+    degree.sort(key = lambda degree:degree[1], reverse=False)
+    save_raw("reverse_sorted_degree.txt", degree, num_nodes)
+
+    degree.sort(key = lambda degree:degree[1], reverse=True)
+    save_raw("sorted_degree.txt", degree, num_nodes)'''
+
+    # Evaluation code
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
                      dataset.num_classes, args.num_layers,
@@ -217,6 +241,7 @@ def inference():
     nvtx.RangePop()
     
     ## load 3-hop neighbors and run test
+    data = data.to(device)
     three_hop = open("three-hop.txt", "r")
     lines = three_hop.readlines()
     y_preds = []
@@ -224,9 +249,10 @@ def inference():
     total_latency = 0.0
     for idx, (node, line) in enumerate(zip(split_idx['test'], lines)):
         neighbors_list = list(map(int, line.strip().split(" ")))
+
         count = len(neighbors_list)
         neighbors = torch.tensor(neighbors_list)
-        
+
         x_sub = torch.zeros(count, data.num_features)
         x_sub[:count] = data.x[neighbors]
 
@@ -256,7 +282,6 @@ def inference():
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
     print("1-node inference per node avg latency: %.5fs" % (total_latency/100))
-    nvtx.RangePop()
 
 def main():
     parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
@@ -331,4 +356,4 @@ if __name__ == "__main__":
     total_nodes = 169343
     # main()
     inference()
-    
+
