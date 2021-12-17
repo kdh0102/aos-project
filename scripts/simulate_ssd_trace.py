@@ -1,4 +1,5 @@
 import sys
+import time
 from multiprocessing import Process
 from subprocess import call
 from dataclasses import dataclass, field
@@ -65,6 +66,16 @@ def record_blktrace(func):
     return blktrace
 
 
+def timer(func):
+    def _timer(*args, **kwargs):
+        start = time. time_ns()
+        func(*args, **kwargs)
+        end = time. time_ns()
+        return end - start
+    return _timer
+
+
+
 def sanity_check(data_file_path: Path):
     for file in {**SPLIT_FILES, **DATA_TRACE_FILES}.values():
         assert((data_file_path / file).exists())
@@ -103,24 +114,32 @@ class Trace:
         file_handlers = open_data_trace_files(data_file_path)
         sentence_len = get_sentence_len(file_handlers)
 
-        handler_x, len_x = file_handlers["x"], sentence_len["x"]
-        handler_edge_attr, len_edge_attr = file_handlers["edge_attr"], sentence_len["edge_attr"]
-        handler_edge_index_row, len_edge_index_row = file_handlers["edge_index_row"], sentence_len["edge_index_row"]
-        handler_edge_index_col, len_edge_index_col = file_handlers["edge_index_col"], sentence_len["edge_index_col"]
+        self.handler_x, self.len_x = file_handlers["x"], sentence_len["x"]
+        self.handler_edge_attr, self.len_edge_attr = file_handlers["edge_attr"], sentence_len["edge_attr"]
+        self.handler_edge_index_row, self.len_edge_index_row = file_handlers["edge_index_row"], sentence_len["edge_index_row"]
+        self.handler_edge_index_col, self.len_edge_index_col = file_handlers["edge_index_col"], sentence_len["edge_index_col"]
 
+        event_durations = []
         for event in self.events:
-            # Read node.x file
-            handler_x.seek(event.node_start * len_x)
-            data_x = handler_x.read(event.node_count * len_x)
+            event_durations.append(self._iterate_event(event))
 
-            handler_edge_attr.seek(event.edge_start * len_edge_attr)
-            data_edge_attr = handler_edge_attr.read(event.edge_count * len_edge_attr)
+        return event_durations
 
-            handler_edge_index_row.seek(event.edge_start * len_edge_index_row)
-            data_edge_index_row = handler_edge_index_row.read(event.edge_count * len_edge_index_row)
+    @timer
+    def _iterate_event(self, event):
+        # Read node.x file
+        self.handler_x.seek(event.node_start * self.len_x)
+        self.data_x = self.handler_x.read(event.node_count * self.len_x)
 
-            handler_edge_index_col.seek(event.edge_start * len_edge_index_col)
-            data_edge_index_col = handler_edge_index_col.read(event.edge_count * len_edge_index_col)
+        self.handler_edge_attr.seek(event.edge_start * self.len_edge_attr)
+        self.data_edge_attr = self.handler_edge_attr.read(event.edge_count * self.len_edge_attr)
+
+        self.handler_edge_index_row.seek(event.edge_start * self.len_edge_index_row)
+        self.data_edge_index_row = self.handler_edge_index_row.read(event.edge_count * self.len_edge_index_row)
+
+        self.handler_edge_index_col.seek(event.edge_start * self.len_edge_index_col)
+        self.data_edge_index_col = self.handler_edge_index_col.read(event.edge_count * self.len_edge_index_col)
+
 
 
     @classmethod
@@ -150,6 +169,11 @@ class Trace:
         return cls(events)
 
 
+def dump_event_stats(event_times):
+    print(f"# Events: {len(event_times)}")
+    print(f"Avg Event Duration(ns): {sum(event_times) / len(event_times)}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise Exception("The arguments should include 1)trace file and 2)data file path.")
@@ -158,4 +182,5 @@ if __name__ == "__main__":
     data_file_path = sys.argv[2]
 
     trace = Trace.parse_trace_file(trace_file)
-    trace.simulate(Path(data_file_path))
+    event_times = trace.simulate(Path(data_file_path))
+    dump_event_stats(event_times)
