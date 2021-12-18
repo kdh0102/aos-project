@@ -1,6 +1,6 @@
 import copy
 
-def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=100, topk = 20):
+def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=100, topk = 20, low=90, use_topk=True):
     sorted_degree_file = open(sorted_degree_path, "r")
     working_set_file = open(working_set_path, "r")
 
@@ -18,21 +18,34 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
     important_vertice = []
     working_set = []
 
-    for i, degree_line in enumerate(sorted_degree_lines):
+    print("Started Importnat vertices")
+    k = 0
+    for degree_line in sorted_degree_lines:
         degree = list(map(int, degree_line.strip().split(" ")))
         
         if degree[1] > threshold:
             continue
 
-        for k in range(topk):
-            neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
-            important_vertice.append(degree[0])
-            working_set.append(set(neighbors_list))
+        if use_topk:
+            if k < topk:
+                neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
+                important_vertice.append(degree[0])
+                working_set.append(set(neighbors_list))
+                k = k+1
+                continue
+        else:
+            if degree[1] > low:
+                neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
+                important_vertice.append(degree[0])
+                working_set.append(set(neighbors_list))    
+                continue
+
         break
 
     important_vertex = important_vertice[0]
     index_list = { vertex : i for i, vertex in enumerate(important_vertice)}
 
+    print("Started remapping")
     while important_vertice != []:
         important_vertice.remove(important_vertex)
 
@@ -64,7 +77,7 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
                 intersection = len(working_set[index_list[important_vertex]] & working_set[index_list[j]])
                 important_vertex = j
     
-
+    print("Started remaining")
     for i, degree_line in enumerate(sorted_degree_lines):
         degree = list(map(int, degree_line.strip().split(" ")))
 
@@ -149,8 +162,6 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
             traversed[degree[0]] = True
             new_index_table.append( (degree[0], new_index) )
             count += 1
-
-    print(count)
 
     sorted_degree_file.close()
     working_set_file.close()

@@ -1,6 +1,6 @@
 import copy
 
-def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=100, topk = 20, low=90):
+def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=100, topk = 20, low=90, use_topk=True):
     sorted_degree_file = open(sorted_degree_path, "r")
     working_set_file = open(working_set_path, "r")
 
@@ -19,25 +19,26 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
     working_set = []
 
     k = 0
-    for i, degree_line in enumerate(sorted_degree_lines):
+    for degree_line in sorted_degree_lines:
         degree = list(map(int, degree_line.strip().split(" ")))
         
         if degree[1] > threshold:
             continue
 
-        if k < topk:
-            neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
-            important_vertice.append(degree[0])
-            working_set.append(set(neighbors_list))
-            k = k+1
-            continue
+        if use_topk:
+            if k < topk:
+                neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
+                important_vertice.append(degree[0])
+                working_set.append(set(neighbors_list))
+                k = k+1
+                continue
+        else:
+            if degree[1] > low:
+                neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
+                important_vertice.append(degree[0])
+                working_set.append(set(neighbors_list))    
+                continue
 
-        '''
-        if degree[1] > low:
-            neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
-            important_vertice.append(degree[0])
-            working_set.append(set(neighbors_list))    
-        '''
         break
 
     important_vertex = important_vertice[0]
