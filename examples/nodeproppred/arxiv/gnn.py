@@ -63,14 +63,14 @@ class GCN(torch.nn.Module):
         super(GCN, self).__init__()
 
         self.convs = torch.nn.ModuleList()
-        self.convs.append(GCNConv(in_channels, hidden_channels, cached=False))
+        self.convs.append(GCNConv(in_channels, hidden_channels, cached=False, normalize=False))
         self.bns = torch.nn.ModuleList()
         self.bns.append(torch.nn.BatchNorm1d(hidden_channels))
         for _ in range(num_layers - 2):
             self.convs.append(
-                GCNConv(hidden_channels, hidden_channels, cached=False))
+                GCNConv(hidden_channels, hidden_channels, cached=False, normalize=False))
             self.bns.append(torch.nn.BatchNorm1d(hidden_channels))
-        self.convs.append(GCNConv(hidden_channels, out_channels, cached=False))
+        self.convs.append(GCNConv(hidden_channels, out_channels, cached=False, normalize=False))
 
         self.dropout = dropout
 
@@ -82,8 +82,6 @@ class GCN(torch.nn.Module):
 
     ## gcn_norm is done in advance
     def forward(self, x, adj_t):
-        for conv in self.convs:
-            conv.normalize = False
         for i, conv in enumerate(self.convs[:-1]):
             x = conv(x, adj_t)
             x = self.bns[i](x)
@@ -160,20 +158,7 @@ def test(model, data, split_idx, evaluator):
 
     return train_acc, valid_acc, test_acc
 
-def inference():
-    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--log_steps', type=int, default=1)
-    parser.add_argument('--use_sage', action='store_true')
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=256)
-    parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--epochs', type=int, default=500)
-    parser.add_argument('--runs', type=int, default=10)
-    args = parser.parse_args()
-    print(args)
-
+def reorganize(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
 
@@ -183,14 +168,6 @@ def inference():
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
     split_idx = dataset.get_idx_split()
-
-    # save working_set (adj)
-    '''adj = data.adj_t.set_diag()
-    save_raw("adj_t.txt", data.adj_t, num_nodes)
-    #save_raw("adj_t.txt", data.adj_t, num_nodes, split_idx['test'])
-    two_hop = adj.matmul(adj)
-    save_raw("two-hop.txt", two_hop, num_nodes)
-    #save_raw("two-hop.txt", two_hop, num_nodes, split_idx['test'])'''
 
     # Reorganize code
     num_nodes = data.adj_t.size(0)
@@ -219,8 +196,55 @@ def inference():
     if functionality_check(new_index_sorted, num_nodes):
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
 
-    # Evaluation code
-    '''if args.use_sage:
+def save_neighbors():
+    dataset = PygNodePropPredDataset(name='ogbn-arxiv',
+                                     transform=T.ToSparseTensor())
+
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_idx = dataset.get_idx_split()
+
+    num_nodes = data.adj_t.size(0)
+    adj = data.adj_t.set_diag()
+    save_raw("adj_t.txt", data.adj_t, num_nodes)
+    two_hop = adj.matmul(adj)
+    save_raw("two-hop.txt", two_hop, num_nodes)
+    three_hop = two_hop.matmul(adj)
+    save_raw("two-hop.txt", three_hop, num_nodes)
+
+def remap_neighbors():
+    mapping = open("new_index.txt", "r")
+    lines = mapping.readlines()
+    old_to_new = {}
+    for old_idx, line in enumerate(lines):
+        new_idx = line.strip()
+        old_to_new[old_idx] = int(new_idx)
+    mapping.close()
+
+    three_hop = open("three-hop-100.txt", "r")
+    three_hop_remapped = open("three-hop-remapped.txt", "w")
+    lines = three_hop.readlines()
+    for line in lines:
+        old_neighbors = line.strip().split(" ")
+        new_neighbors = []
+        for neighbor in old_neighbors:
+            new_neighbors.append(str(old_to_new[int(neighbor)]))
+        print(" ".join(new_neighbors), file=three_hop_remapped)
+    three_hop.close()
+    three_hop_remapped.close()
+
+def inference(args):
+    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device)
+
+    dataset = PygNodePropPredDataset(name='ogbn-arxiv',
+                                     transform=T.ToSparseTensor())
+
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_idx = dataset.get_idx_split()
+
+    if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
                      dataset.num_classes, args.num_layers,
                      args.dropout).to(device)
@@ -234,7 +258,6 @@ def inference():
 
     evaluator = Evaluator(name='ogbn-arxiv')
     model.eval()
-    nvtx.RangePop()
     
     ## load 3-hop neighbors and run test
     data = data.to(device)
@@ -270,29 +293,15 @@ def inference():
         if idx == 99:
             break
 
-    nvtx.RangePush("Eval")
     test_acc = evaluator.eval({
         'y_true': data.y[split_idx['test'][:100]],
         'y_pred': torch.tensor(y_preds).view(-1, 1),
     })['acc']
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))'''
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))
 
-def main():
-    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--log_steps', type=int, default=1)
-    parser.add_argument('--use_sage', action='store_true')
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=256)
-    parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--epochs', type=int, default=500)
-    parser.add_argument('--runs', type=int, default=10)
-    args = parser.parse_args()
-    print(args)
-
+def main(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
 
@@ -350,6 +359,31 @@ def main():
 if __name__ == "__main__":
     global total_nodes
     total_nodes = 169343
-    # main()
-    inference()
+
+    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--log_steps', type=int, default=1)
+    parser.add_argument('--use_sage', action='store_true')
+    parser.add_argument('--num_layers', type=int, default=3)
+    parser.add_argument('--hidden_channels', type=int, default=256)
+    parser.add_argument('--dropout', type=float, default=0.5)
+    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--epochs', type=int, default=500)
+    parser.add_argument('--runs', type=int, default=10)
+    parser.add_argument('--mode', type=str, default="inference")
+    args = parser.parse_args()
+    print(args)
+
+    if args.mode == 'original':
+        main(args)
+    elif args.mode == 'inference':
+        inference(args)
+    elif args.mode == 'reorganize':
+        reorganize(args)
+    elif args.mode == 'neighbor':
+        save_neighbors()
+    elif args.mode == 'remapping':
+        remap_neighbors()
+    else:
+        sys.exit()
 
