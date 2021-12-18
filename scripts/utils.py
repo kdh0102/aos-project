@@ -1,4 +1,5 @@
 import time
+import mmap
 from pathlib import Path
 from dataclasses import dataclass
 from multiprocessing import Process
@@ -51,7 +52,8 @@ def open_data_trace_files(data_file_path):
     handlers = {}
     for key, fname in DATA_TRACE_FILES.items():
         if (data_file_path / fname).exists():
-            handlers[key] = open(data_file_path / fname, "r")
+            with open(data_file_path / fname, "rb") as f:
+                handlers[key] = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
 
     return handlers
 
