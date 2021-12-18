@@ -52,10 +52,10 @@ def save_new_graph(data, new_index_table, new_index_sorted, num_nodes):
         #print(" ".join(new_embedding[i]), file=out)
     out.close()
 
-    out = open("new_adj_t.txt", "w")
+    '''out = open("new_adj_t.txt", "w")
     for i in range(num_nodes):
         new_adj_t[i] = list(map(str, new_adj_t[i]))
         print(" ".join(new_adj_t[i]), file=out)
-    out.close()
+    out.close()'''
 
 
