@@ -16,6 +16,9 @@ import numpy as np
 import tensorflow as tf
 import sys, time
 
+from save_features import *
+from reorganize import *
+
 class GCN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers,
                  dropout):
@@ -200,7 +203,7 @@ def inference():
     data.adj_t = data.adj_t.to_symmetric()
     split_edge = dataset.get_edge_split()
 
-    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
+    '''source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
     source_node = set(source_node_list)
     target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
     target_node = set(target_node_list)
@@ -208,7 +211,45 @@ def inference():
     target_neg = set(target_neg_list)
     nodes = source_node.union(target_node)
     nodes = list(nodes.union(target_neg))
-    nodes.sort()
+    nodes.sort()'''
+
+    num_nodes = data.adj_t.size(0)
+    # save working_set (adj)
+    '''print("Start saving adj_t")
+    adj = data.adj_t.set_diag()
+    save_raw("adj_t.txt", data.adj_t, num_nodes)'''
+    #two_hop = adj.matmul(adj)
+    #save_raw("two-hop.txt", two_hop, num_nodes)
+
+    # Reorganize code
+    sorted_degree_path = "sorted_degree.txt"
+    working_set_path = "adj_t.txt" 
+
+    '''print("Started Sorting")
+    degree = []
+    for i in range(num_nodes):
+        degree.append( (i, data.adj_t[i].nnz()) )
+    degree.sort(key = lambda degree:degree[1], reverse=True)
+    save_raw("sorted_degree.txt", degree, num_nodes)'''
+
+    threshold = 1000
+    use_GLIST = True
+    use_topk = False
+
+    print("Started Reorganization")
+    if not use_GLIST:
+        low = 100
+        new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
+    else:
+        topk = 20
+        low = threshold - 10
+        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
+
+    print("Finished Reorganization")
+    if functionality_check(new_index_sorted, num_nodes):
+        print("Saving")
+        save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
+
 
     # save 3-hop neighbors
     # adj = data.adj_t.set_diag()
@@ -232,7 +273,7 @@ def inference():
     #     print(" ".join(nlist), file=out)
     # sys.exit()
 
-    predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
+    '''predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
                               args.num_layers, args.dropout).to(device)
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
@@ -299,7 +340,7 @@ def inference():
     })['mrr_list'].mean().item()
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))'''
 
 
 def main():
@@ -418,5 +459,5 @@ def main():
 if __name__ == "__main__":
     global num_edge_to_test
     num_edge_to_test = 2
-    main()
+    #main()
     inference()
