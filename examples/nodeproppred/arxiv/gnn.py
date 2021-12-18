@@ -182,49 +182,45 @@ def inference():
 
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
-    num_nodes = data.adj_t.size(0)
     split_idx = dataset.get_idx_split()
 
+    # save working_set (adj)
+    '''adj = data.adj_t.set_diag()
+    save_raw("adj_t.txt", data.adj_t, num_nodes)
+    #save_raw("adj_t.txt", data.adj_t, num_nodes, split_idx['test'])
+    two_hop = adj.matmul(adj)
+    save_raw("two-hop.txt", two_hop, num_nodes)
+    #save_raw("two-hop.txt", two_hop, num_nodes, split_idx['test'])'''
+
+    # Reorganize code
+    num_nodes = data.adj_t.size(0)
+
     sorted_degree_path = "sorted_degree.txt"
-    reverse_sorted_degree_path = "reverse_sorted_degree.txt"
     working_set_path = "two-hop.txt"
+
+    # Save sorted/reverse sorted degree
+    degree = []
+    for i in range(num_nodes):
+        degree.append( (i, data.adj_t[i].nnz()) )
+
+    degree.sort(key = lambda degree:degree[1], reverse=True)
+    save_raw("sorted_degree.txt", degree, num_nodes)
+
     threshold = 100
-    low = 10
+    use_GLIST = False
 
-    #new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, reverse_sorted_degree_path, working_set_path,
-    #                                num_nodes, threshold, low)
+    if not use_GLIST:
+        low = 10
+        new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
+    else:
+        topk = 20
+        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk)
 
-    topk = 20
-    new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk)
     if functionality_check(new_index_sorted, num_nodes):
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
 
-    ## save 3-hop neighbors
-    #adj = data.adj_t.set_diag()
-    # print(adj)
-    #two_hop = adj.matmul(adj)
-    # print(two_hop)
-    # three_hop = two_hop.matmul(adj)
-    # print(three_hop)
-
-    # Save original data
-    #save_raw("adj_t.txt", data.adj_t, num_nodes)
-    #save_raw("adj_t.txt", data.adj_t, num_nodes, split_idx['test'])
-    #save_raw("two-hop.txt", two_hop, num_nodes)
-    #save_raw("three-hop.txt", three_hop, num_nodes, split_idx['test'])
-
-    # Save sorted/reverse sorted degree
-    '''degree = []
-    for i in range(num_nodes):
-        degree.append( (i, data.adj_t[i].nnz()) )
-    degree.sort(key = lambda degree:degree[1], reverse=False)
-    save_raw("reverse_sorted_degree.txt", degree, num_nodes)
-
-    degree.sort(key = lambda degree:degree[1], reverse=True)
-    save_raw("sorted_degree.txt", degree, num_nodes)'''
-
     # Evaluation code
-    if args.use_sage:
+    '''if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
                      dataset.num_classes, args.num_layers,
                      args.dropout).to(device)
@@ -281,7 +277,7 @@ def inference():
     })['acc']
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))'''
 
 def main():
     parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')

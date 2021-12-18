@@ -150,6 +150,8 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
             new_index_table.append( (degree[0], new_index) )
             count += 1
 
+    print(count)
+
     sorted_degree_file.close()
     working_set_file.close()
 
