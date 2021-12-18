@@ -67,6 +67,8 @@ def record_blktrace(func):
 
 
 def timer(func):
+    # a decorator to record the duration
+    # Note that this decorator will return the function duration, instead of the function output.
     def _timer(*args, **kwargs):
         start = time. time_ns()
         func(*args, **kwargs)
