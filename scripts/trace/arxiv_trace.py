@@ -3,24 +3,20 @@ from typing import List
 from pathlib import Path
 
 from trace.trace import Trace
-from utils import sanity_check, open_data_trace_files, get_sentence_len, timer
+from utils import open_data_trace_files, get_sentence_len, timer
 
 @dataclass
-class MolIOEvent():
-    graph_idx: int
-    node_start: int
-    node_count: int
-    edge_start: int
-    edge_count: int
-    y_value: int
+class ArxivIOEvent():
+    neighbors: List[int]
 
     @classmethod
     def from_trace(cls, items: List[str]):
-        return cls(*[int(item) for item in items])
+        return cls([int(item) for item in items])
+
 
 @dataclass
-class MolTrace(Trace):
-    events: List[MolIOEvent] = field(default_factory=list)
+class ArxivTrace(Trace):
+    events: List[ArxivIOEvent] = field(default_factory=list)
 
     def simulate(self, data_file_path: Path):
         """Run simulation on the storage for mol dataset.
@@ -30,12 +26,10 @@ class MolTrace(Trace):
                                   that you want to simulate.
 
         """
-        sanity_check(data_file_path)
         file_handlers = open_data_trace_files(data_file_path)
         sentence_len = get_sentence_len(file_handlers)
 
         self.handler_x, self.len_x = file_handlers["x"], sentence_len["x"]
-        self.handler_edge_attr, self.len_edge_attr = file_handlers["edge_attr"], sentence_len["edge_attr"]
 
         event_durations = []
         for event in self.events:
@@ -46,12 +40,9 @@ class MolTrace(Trace):
     @timer
     def _iterate_event(self, event):
         # Read node.x file
-        self.handler_x.seek(event.node_start * self.len_x)
-        self.data_x = self.handler_x.read(event.node_count * self.len_x)
-
-        self.handler_edge_attr.seek(event.edge_start * self.len_edge_attr)
-        self.data_edge_attr = self.handler_edge_attr.read(event.edge_count * self.len_edge_attr)
-
+        for neighbor in event.neighbors:
+            self.handler_x.seek(neighbor * self.len_x)
+            self.data_x = self.handler_x.read(self.len_x)
 
 
     @classmethod
@@ -74,8 +65,11 @@ class MolTrace(Trace):
                     # Assumption: The first line contains `#` in the beginning.
                     if "#" in line:
                         continue
-                    events.append(MolIOEvent.from_trace(line.split("\t")))
+                    events.append(ArxivIOEvent.from_trace(line.split(" ")))
         except:
             raise FileExistsError(f"Trace file({trace_file}) does not exist.")
 
         return cls(events)
+
+    def __len__(self):
+        return len(self.events)

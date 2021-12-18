@@ -50,7 +50,8 @@ def sanity_check(data_file_path: Path):
 def open_data_trace_files(data_file_path):
     handlers = {}
     for key, fname in DATA_TRACE_FILES.items():
-        handlers[key] = open(data_file_path / fname, "r")
+        if (data_file_path / fname).exists():
+            handlers[key] = open(data_file_path / fname, "r")
 
     return handlers
 

@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
 
+from trace.trace import Trace
 from trace.mol_trace import MolTrace
+from trace.arxiv_trace import ArxivTrace
 
 
 def dump_event_stats(event_times):
@@ -11,12 +13,20 @@ def dump_event_stats(event_times):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise Exception("The arguments should include 1)trace file and 2)data file path.")
+    if len(sys.argv) != 4:
+        raise Exception("The arguments should include 1)trace file 2)dataset type and 3)data file path.")
 
     trace_file = sys.argv[1]
-    data_file_path = sys.argv[2]
+    dataset_type = sys.argv[2]
+    data_file_path = sys.argv[3]
 
-    trace = MolTrace.parse_trace_file(trace_file)
+    trace = Trace()
+    if dataset_type == "mol":
+        trace = MolTrace.parse_trace_file(trace_file)
+    elif dataset_type == "arxiv":
+        trace = ArxivTrace.parse_trace_file(trace_file)
+    else:
+        raise NotImplementedError
+
     event_times = trace.simulate(Path(data_file_path))
     dump_event_stats(event_times)
