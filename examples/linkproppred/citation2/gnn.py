@@ -215,9 +215,9 @@ def inference():
 
     num_nodes = data.adj_t.size(0)
     # save working_set (adj)
-    '''print("Start saving adj_t")
+    print("Start saving adj_t")
     adj = data.adj_t.set_diag()
-    save_raw("adj_t.txt", data.adj_t, num_nodes)'''
+    save_raw("adj_t.txt", data.adj_t, num_nodes)
     #two_hop = adj.matmul(adj)
     #save_raw("two-hop.txt", two_hop, num_nodes)
 
@@ -225,16 +225,16 @@ def inference():
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt" 
 
-    '''print("Started Sorting")
+    print("Started Sorting")
     degree = []
     for i in range(num_nodes):
         degree.append( (i, data.adj_t[i].nnz()) )
     degree.sort(key = lambda degree:degree[1], reverse=True)
-    save_raw("sorted_degree.txt", degree, num_nodes)'''
+    save_raw("sorted_degree.txt", degree, num_nodes)
 
     threshold = 1000
     use_GLIST = True
-    use_topk = False
+    use_topk = True
 
     print("Started Reorganization")
     if not use_GLIST:
