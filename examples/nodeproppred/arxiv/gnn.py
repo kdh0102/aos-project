@@ -207,14 +207,16 @@ def inference():
     save_raw("sorted_degree.txt", degree, num_nodes)
 
     threshold = 100
-    use_GLIST = False
+    use_GLIST = True
+    use_topk = True
 
     if not use_GLIST:
         low = 10
         new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
     else:
         topk = 20
-        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk)
+        low = threshold - 10
+        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
 
     if functionality_check(new_index_sorted, num_nodes):
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
