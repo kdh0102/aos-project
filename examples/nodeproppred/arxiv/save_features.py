@@ -22,7 +22,6 @@ def save_new_graph(data, new_index_table, new_index_sorted, num_nodes):
     
     new_adj_t = []
     new_embedding = []
-    new_index = []
     embedding = data.x.numpy()
 
     for index in new_index_sorted:
@@ -38,8 +37,8 @@ def save_new_graph(data, new_index_table, new_index_sorted, num_nodes):
     # Store reorganized embedding, adj matrix
     out = open("new_index.txt", "w")
     for i in range(num_nodes):
-        new_index[i] = list(map(str, new_index_table[i][1]))
-        print(" ".join(new_index[i]), file=out)
+        new_index list(map(str, new_index_table[i][1]))
+        print(" ".join(new_index, file=out)
     out.close()
 
     out = open("new_embedding.txt", "w")
