@@ -230,8 +230,9 @@ def remap_neighbors():
         old_neighbors = line.strip().split(" ")
         new_neighbors = []
         for neighbor in old_neighbors:
-            new_neighbors.append(str(old_to_new[int(neighbor)]))
-        print(" ".join(new_neighbors), file=three_hop_remapped)
+            new_neighbors.append(int(old_to_new[int(neighbor)]))
+        new_neighbors.sort()
+        print(" ".join(list(map(str, new_neighbors))), file=three_hop_remapped)
     three_hop.close()
     three_hop_remapped.close()
 
@@ -387,5 +388,6 @@ if __name__ == "__main__":
     elif args.mode == 'remapping':
         remap_neighbors()
     else:
+        
         sys.exit()
 
