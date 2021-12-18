@@ -1,3 +1,5 @@
+import struct
+
 def save_raw(path, data, num_nodes, split_idx=None):
     out = open(path, "w")
 
@@ -41,10 +43,13 @@ def save_new_graph(data, new_index_table, new_index_sorted, num_nodes):
         print(new_index, file=out)
     out.close()
 
-    out = open("new_embedding.txt", "w")
+    out = open("new_embedding.bin", "wb")
     for i in range(num_nodes):
-        new_embedding[i] = list(map(str, new_embedding[i]))
-        print(" ".join(new_embedding[i]), file=out)
+        for embedding in new_embedding[i]:
+            data = struct.pack("f", embedding)
+            out.write(data)
+        #new_embedding[i] = list(map(str, new_embedding[i]))
+        #print(" ".join(new_embedding[i]), file=out)
     out.close()
 
     out = open("new_adj_t.txt", "w")
