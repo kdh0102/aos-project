@@ -59,8 +59,8 @@ struct ArxivEvent : Event {
 class Trace {
  public:
   explicit Trace() {}
-  void Simulate() {}
   std::vector<Event>& GetEvents() { return events; }
+  virtual void Simulate() = 0;
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
@@ -72,6 +72,9 @@ class MolTrace : public Trace {
   explicit MolTrace() : Trace() {}
   Event CreateEvent(std::vector<std::string> words) override {
     return MolEvent(words);
+  }
+
+  void Simulate() {
   }
 };
 
@@ -120,10 +123,12 @@ int main(int argc, char** argv) {
   if (dataset_type == "mol") {
     MolTrace trace = MolTrace();
     FromTraceFile(trace, trace_file);
+    trace.Simulate();
   }
   else if (dataset_type == "arxiv") {
     ArxivTrace trace = ArxivTrace();
     FromTraceFile(trace, trace_file);
+    trace.Simulate();
   }
   else {
     std::cout << dataset_type << " is not supported." << std::endl;
