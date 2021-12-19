@@ -1,9 +1,16 @@
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <string>
 #include <map>
-#include <sys/mman.h>
 
 #define STORAGE "/dev/nvme0n1"
 #define DATA_X "data.x"
@@ -60,32 +67,61 @@ struct ArxivEvent : Event {
   }
 };
 
+struct DataFile {
+  int fd;
+  char * mmap_pointer;
+  size_t len;
+
+  explicit DataFile(int fd = -1, char * mmap_pointer = NULL, size_t len = 0)
+    : fd(fd), mmap_pointer(mmap_pointer), len(len) {}
+};
+
 class Trace {
  public:
   explicit Trace(std::string data_file_path) {
     OpenDataFiles(data_file_path);
   }
+
   std::vector<Event>& GetEvents() { return events; }
+
   void OpenDataFiles(std::string data_file_path) {
     std::vector<std::string> files = {DATA_X, EDGE_ATTR};
 
     for (auto file : files) {
       std::string file_name = data_file_path + file + ".bin";
       std::cout << "file name : " + file_name << std::endl;
-      std::ifstream file_handler(file_name, std::ifstream::binary);
-      if (file_handler) {
-        data_files[file] = std::move(file_handler);
+      int fd = open(file_name.c_str(), O_RDONLY);
+      if (fd != -1) {
+
+        struct stat fileInfo = {0};
+        if (fstat(fd, &fileInfo) == -1) {
+          std::cout << "file stat open fails." << std::endl;
+          exit(-1);
+        }
+        char *map = static_cast<char*>(mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0));
+        data_files[file] = DataFile(fd, map, fileInfo.st_size);
       } else {
         std::cout << file + " does not exist." << std::endl;
       }
     }
   }
+
+  ~Trace() {
+    for (auto &item : data_files) {
+      close(item.second.fd);
+      munmap(item.second.mmap_pointer, item.second.len);
+    }
+  }
+
   virtual void Simulate() = 0;
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
   std::vector<Event> events;
-  std::map<std::string, std::ifstream> data_files;
+  // Save data info
+  std::map<std::string, DataFile> data_files;
+  // Save sentence length for each file
+  std::map<std::string, int> sentence_lengths;
 };
 
 class MolTrace : public Trace {
