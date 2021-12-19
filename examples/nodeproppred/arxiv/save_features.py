@@ -58,4 +58,16 @@ def save_new_graph(data, new_index_table, new_index_sorted, num_nodes):
         print(" ".join(new_adj_t[i]), file=out)
     out.close()
 
-
+def save_remapped_index(filename, new_index_table):
+    three_hop = open("three-hop-100.txt", "r")
+    three_hop_remapped = open(filename, "w")
+    lines = three_hop.readlines()
+    for line in lines:
+        old_neighbors = line.strip().split(" ")
+        new_neighbors = []
+        for neighbor in old_neighbors:
+            new_neighbors.append(int(new_index_table[int(neighbor)][0]))
+        new_neighbors.sort()
+        print(" ".join(list(map(str, new_neighbors))), file=three_hop_remapped)
+    three_hop.close()
+    three_hop_remapped.close()

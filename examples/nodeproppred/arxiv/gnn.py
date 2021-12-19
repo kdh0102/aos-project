@@ -158,10 +158,7 @@ def test(model, data, split_idx, evaluator):
 
     return train_acc, valid_acc, test_acc
 
-def reorganize(args):
-    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
-    device = torch.device(device)
-
+def reorganize():
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
                                      transform=T.ToSparseTensor())
 
@@ -197,6 +194,26 @@ def reorganize(args):
 
     if functionality_check(new_index_sorted, num_nodes):
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
+
+def sweep():
+    num_nodes = 169343
+
+    sorted_degree_path = "sorted_degree.txt"
+    working_set_path = "two-hop.txt"
+
+    # conditions = [(100, True, 20, -1), (100, True, 100, -1), (100, False, -1, 90), (100, False, -1, 95)]
+    conditions = [(2000, False, -1, 800)]
+    for condition in conditions:
+        threshold, use_topk, topk, low = condition
+        if use_topk:
+            filename = "trace_%d_top%d.txt" % (threshold, topk)
+        else:
+            filename = "trace_%d_%d.txt" % (threshold, low)
+        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
+
+        if functionality_check(new_index_sorted, num_nodes):
+            save_remapped_index(filename, new_index_table)
+        print(filename, "saved")
 
 def save_neighbors():
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
@@ -382,11 +399,13 @@ if __name__ == "__main__":
     elif args.mode == 'inference':
         inference(args)
     elif args.mode == 'reorganize':
-        reorganize(args)
+        reorganize()
     elif args.mode == 'neighbor':
         save_neighbors()
     elif args.mode == 'remapping':
         remap_neighbors()
+    elif args.mode == 'sweep':
+        sweep()
     else:
         
         sys.exit()
