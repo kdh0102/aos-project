@@ -41,8 +41,9 @@ class ArxivTrace(Trace):
     def _iterate_event(self, event):
         # Read node.x file
         for neighbor in event.neighbors:
-            self.handler_x.seek(neighbor * self.len_x)
-            self.data_x = self.handler_x.read(self.len_x)
+            # self.handler_x.seek(neighbor * self.len_x)
+            # self.data_x = self.handler_x.read(self.len_x)
+            self.data_x = self.handler_x[neighbor * 512: (neighbor + 1) * 512]
 
 
     @classmethod
