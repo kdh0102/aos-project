@@ -2,8 +2,12 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <map>
 #include <sys/mman.h>
 
+#define STORAGE "/dev/nvme0n1"
+#define DATA_X "data.x"
+#define EDGE_ATTR "data.edge_attr"
 
 void removeDupWord(std::string str, std::vector<std::string>& words) {
   std::string word = "";
@@ -58,18 +62,35 @@ struct ArxivEvent : Event {
 
 class Trace {
  public:
-  explicit Trace() {}
+  explicit Trace(std::string data_file_path) {
+    OpenDataFiles(data_file_path);
+  }
   std::vector<Event>& GetEvents() { return events; }
+  void OpenDataFiles(std::string data_file_path) {
+    std::vector<std::string> files = {DATA_X, EDGE_ATTR};
+
+    for (auto file : files) {
+      std::string file_name = data_file_path + file + ".bin";
+      std::cout << "file name : " + file_name << std::endl;
+      std::ifstream file_handler(file_name, std::ifstream::binary);
+      if (file_handler) {
+        data_files[file] = std::move(file_handler);
+      } else {
+        std::cout << file + " does not exist." << std::endl;
+      }
+    }
+  }
   virtual void Simulate() = 0;
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
   std::vector<Event> events;
+  std::map<std::string, std::ifstream> data_files;
 };
 
 class MolTrace : public Trace {
  public:
-  explicit MolTrace() : Trace() {}
+  explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {}
   Event CreateEvent(std::vector<std::string> words) override {
     return MolEvent(words);
   }
@@ -80,7 +101,7 @@ class MolTrace : public Trace {
 
 class ArxivTrace : public Trace {
  public:
-  explicit ArxivTrace() : Trace() {}
+  explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {}
   Event CreateEvent(std::vector<std::string> words) override {
     return ArxivEvent(words);
   }
@@ -121,16 +142,14 @@ int main(int argc, char** argv) {
   std::string data_file_path = argv[3];
 
   if (dataset_type == "mol") {
-    MolTrace trace = MolTrace();
+    MolTrace trace = MolTrace(data_file_path);
     FromTraceFile(trace, trace_file);
     trace.Simulate();
-  }
-  else if (dataset_type == "arxiv") {
-    ArxivTrace trace = ArxivTrace();
+  } else if (dataset_type == "arxiv") {
+    ArxivTrace trace = ArxivTrace(data_file_path);
     FromTraceFile(trace, trace_file);
     trace.Simulate();
-  }
-  else {
+  } else {
     std::cout << dataset_type << " is not supported." << std::endl;
     exit(0);
   }
