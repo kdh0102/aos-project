@@ -201,8 +201,10 @@ def sweep():
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt"
 
-    conditions = [(30, False, -1, 20)]
-    # conditions = [(1000, False, -1, 950), (110, False, -1, 100)]
+    conditions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # GLIST low
+    conditions = [(300, True, 10, -1), (100, True, 30, -1), (30, True, 100, -1)] # GLIST topk
+    contitions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # Greedy
+    
     for condition in conditions:
         threshold, use_topk, topk, low = condition
         if use_topk:
@@ -229,7 +231,6 @@ def save_neighbors():
 
     split_idx = dataset.get_idx_split()
     test_idx = list(split_idx['test'].numpy())
-    print(test_idx.index(1210))
     
     sort = open("sorted_degree.txt", "r")
     sort_lines = sort.readlines()
@@ -431,6 +432,5 @@ if __name__ == "__main__":
     elif args.mode == 'sweep':
         sweep()
     else:
-        
         sys.exit()
 

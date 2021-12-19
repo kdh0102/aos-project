@@ -38,7 +38,6 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
                 important_vertice.append(degree[0])
                 working_set.append(set(neighbors_list))    
                 continue
-
         break
 
 
@@ -75,6 +74,8 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
             if intersection < len(working_set[index_list[important_vertex]] & working_set[index_list[j]]):
                 intersection = len(working_set[index_list[important_vertex]] & working_set[index_list[j]])
                 important_vertex = j
+
+    print(count)
 
     for i, degree_line in enumerate(sorted_degree_lines):
         degree = list(map(int, degree_line.strip().split(" ")))
@@ -146,6 +147,8 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
 
                 new_index_table.append( (x, new_index) )
                 count += 1
+
+    print(count)
                 
     for i, degree_line in enumerate(reversed(sorted_degree_lines)):
         degree = list(map(int, degree_line.strip().split(" ")))
