@@ -11,6 +11,7 @@ from pathlib import Path
 
 ### importing OGB
 from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
+import struct
 
 cls_criterion = torch.nn.BCEWithLogitsLoss()
 reg_criterion = torch.nn.MSELoss()
@@ -95,12 +96,26 @@ def trace(dataset, split_idx, batch_size = 1):
   
 
 def save_data(dataset, base_path = Path(".")):
-    np.savetxt(base_path / 'data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
-    np.savetxt(base_path / 'data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
-    np.savetxt(base_path / 'data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
-    np.savetxt(base_path / 'data.edge_index_col.txt', dataset.data.edge_index[1].numpy(), fmt='%i')
-    np.savetxt(base_path / 'data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
-    np.savetxt(base_path / 'data.y.txt', dataset.data.y.numpy(), fmt='%i')
+    out = open(base_path / 'data.x.bin', "wb")
+    for embedding in dataset.data.x:
+        for val in embedding:
+            data = struct.pack("i", val)
+            out.write(data)
+    out.close()
+
+    out = open(base_path / 'data.edge_attr.bin', "wb")
+    for embedding in dataset.data.edge_attr:
+        for val in embedding:
+            data = struct.pack("i", val)
+            out.write(data)
+    out.close()
+
+    # np.savetxt(base_path / 'data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
+    # np.savetxt(base_path / 'data.edge_index.txt', dataset.data.edge_index.numpy(), fmt='%i')
+    # np.savetxt(base_path / 'data.edge_index_row.txt', dataset.data.edge_index[0].numpy(), fmt='%i')
+    # np.savetxt(base_path / 'data.edge_index_col.txt', dataset.data.edge_index[1].numpy(), fmt='%i')
+    # np.savetxt(base_path / 'data.edge_attr.txt', dataset.data.edge_attr.numpy(), fmt='%i')
+    # np.savetxt(base_path / 'data.y.txt', dataset.data.y.numpy(), fmt='%i')
 
 
 def save_split_idx(split_idx, base_path = Path(".")):
