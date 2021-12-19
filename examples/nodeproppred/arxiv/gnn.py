@@ -225,9 +225,9 @@ def sweep():
             filename = "trace_%d_%d_greedy.txt" % (threshold, low)
             new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
 
-           if functionality_check(new_index_sorted, num_nodes):
+            if functionality_check(new_index_sorted, num_nodes):
                 save_remapped_index(filename, new_index_sorted)
-            print(filename, "saved")
+                print(filename, "saved")
 
 def save_neighbors():
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
