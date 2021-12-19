@@ -106,6 +106,7 @@ class Trace {
         std::cout << file + " does not exist." << std::endl;
       }
     }
+    buffer=(long*) malloc(1024 * 1024 * 1024);
   }
 
   ~Trace() {
@@ -113,6 +114,7 @@ class Trace {
       close(item.second.fd);
       munmap(item.second.mmap_pointer, item.second.len);
     }
+    free(buffer);
   }
 
   void Simulate() {
@@ -127,6 +129,7 @@ class Trace {
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
+  long *buffer;
   std::vector<Event> events;
   // Save data info
   std::map<std::string, DataFile> data_files;
@@ -149,9 +152,11 @@ class MolTrace : public Trace {
     int c;
 
     auto start = std::chrono::high_resolution_clock::now();
-    for (int i = mol_event->node_start; i < mol_event->node_start + mol_event->node_count; ++i) {
-      c = data_files[DATA_X].mmap_pointer[i];
-    }
+    lseek(data_files[DATA_X].fd, (event.node_start * sentence_lengths[DATA_X]) * 4, SEEK_SET);
+    read(data_files[DATA_X].fd, buffer, (event.node_count * sentence_lengths[DATA_X]) * 4);
+
+    lseek(data_files[EDGE_ATTR].fd, (event.edge_start * sentence_lengths[EDGE_ATTR]) * 4, SEEK_SET);
+    read(data_files[EDGE_ATTR].fd, buffer, (event.edge_count * sentence_lengths[EDGE_ATTR]) * 4);
     auto finish = std::chrono::high_resolution_clock::now();
 
     return std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
@@ -172,9 +177,8 @@ class ArxivTrace : public Trace {
 
     auto start = std::chrono::high_resolution_clock::now();
     for (auto& neighbor : event.neighbors) {
-      for (int i = neighbor * sentence_lengths[DATA_X]; i < (neighbor + 1) * sentence_lengths[DATA_X]; ++i) {
-        c = data_files[DATA_X].mmap_pointer[i];
-      }
+      lseek(data_files[DATA_X].fd, neighbor * sentence_lengths[DATA_X] * 4, SEEK_SET);
+      read(data_files[DATA_X].fd, buffer, sentence_lengths[DATA_X] * 4);
     }
     auto finish = std::chrono::high_resolution_clock::now();
 
