@@ -115,10 +115,10 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
         degree = list(map(int, degree_line.strip().split(" ")))
         
         if degree[1] > threshold:
-            popular[degree[0]] = True
-            traversed[degree[0]] = True
-            new_index_table.append( (degree[0], degree[0]) )
-            count += 1
+            #popular[degree[0]] = True
+            #traversed[degree[0]] = True
+            #new_index_table.append( (degree[0], degree[0]) )
+            #count += 1
             continue
 
         if degree[1] < low:
@@ -150,11 +150,11 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
 
     print(count)
                 
-    for i, degree_line in enumerate(reversed(sorted_degree_lines)):
+    for i, degree_line in enumerate(sorted_degree_lines):
         degree = list(map(int, degree_line.strip().split(" ")))
 
-        if degree[1] == low:
-            break
+        #if degree[1] == low:
+        #    break
         
         if not traversed[degree[0]]:
             while popular[new_index]:
