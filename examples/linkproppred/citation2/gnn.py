@@ -177,9 +177,6 @@ def test(model, predictor, data, split_edge, evaluator, batch_size):
     SparseTensor(row=[], col=[], sparse_sizes=(1, 2))
 
 def reorganize(args):
-    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
-    device = torch.device(device)
-
     dataset = PygLinkPropPredDataset(name='ogbl-citation2',
                                      transform=T.ToSparseTensor())
     data = dataset[0]
@@ -187,23 +184,15 @@ def reorganize(args):
     split_edge = dataset.get_edge_split()
 
     num_nodes = data.adj_t.size(0)
+
     # save working_set (adj)
     print("Start saving adj_t")
     adj = data.adj_t.set_diag()
     save_raw("adj_t.txt", data.adj_t, num_nodes)
-    #two_hop = adj.matmul(adj)
-    #save_raw("two-hop.txt", two_hop, num_nodes)
 
     # Reorganize code
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt" 
-
-    print("Started Sorting")
-    degree = []
-    for i in range(num_nodes):
-        degree.append( (i, data.adj_t[i].nnz()) )
-    degree.sort(key = lambda degree:degree[1], reverse=True)
-    save_raw("sorted_degree.txt", degree, num_nodes)
 
     threshold = 1000
     use_GLIST = True
@@ -223,8 +212,68 @@ def reorganize(args):
         print("Saving")
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
 
+def sweep():
+    num_nodes = 2927963
+
+    sorted_degree_path = "sorted_degree.txt"
+    working_set_path = "adj_t.txt"
+
+    conditions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # GLIST low
+    conditions = [(300, True, 10, -1), (100, True, 30, -1), (30, True, 100, -1)] # GLIST topk
+    contitions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # Greedy
+
+    for condition in conditions:
+        threshold, use_topk, topk, low = condition
+        if use_topk:
+            filename = "trace_%d_top%d.txt" % (threshold, topk)
+        else:
+            filename = "trace_%d_%d.txt" % (threshold, low)
+        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
+
+        if functionality_check(new_index_sorted, num_nodes):
+            save_remapped_index(filename, new_index_sorted)
+        print(filename, "saved")
+
+def save_neighbors():
+    dataset = PygLinkPropPredDataset(name='ogbl-citation2',
+                                     transform=T.ToSparseTensor())
+
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_idx = dataset.get_idx_split()
+
+    num_nodes = data.adj_t.size(0)
+    adj = data.adj_t.set_diag()
+    print(adj)
+
+    split_idx = dataset.get_idx_split()
+    test_idx = list(split_idx['test'].numpy())
+    
+    sort = open("sorted_degree.txt", "r")
+    sort_lines = sort.readlines()
+    threshold = 300
+    selected = []
+    for line in sort_lines:
+        idx, degree = line.strip().split(" ")
+        if int(degree) <= threshold and len(selected) < 100 and (int(idx) in test_idx):
+            print(degree)
+            selected.append(int(idx))
+        if len(selected) == 100:
+            break
+    # selected.sort()
+
+    two_hop = adj[selected].matmul(adj)
+    print(two_hop)
+    three_hop = two_hop.matmul(adj)
+    print(three_hop)
+
+    under = open("under300.txt", "w")
+    for idx in selected:
+        neighbors = list(map(str, adj[idx].coo()[1].numpy()))
+        print(" ".join(neighbors), file=under)
+
 @torch.no_grad()
-def inference():
+def inference(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
 
@@ -232,11 +281,6 @@ def inference():
                                      transform=T.ToSparseTensor())
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
-    split_edge = dataset.get_edge_split()
-
-    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
-    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
-    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
 
     predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
                               args.num_layers, args.dropout).to(device)
@@ -266,15 +310,10 @@ def inference():
 
     evaluator = Evaluator(name='ogbl-citation2')
     
-
-    ## load 3-hop neighbors and run test
-    three_hop = open("three-hop.txt", "r")
-    lines = three_hop.readlines()
-    pos_preds = []
-    neg_preds = []
-    
-    total_latency = 0.0
-    for idx, (src, dst, neg, line) in enumerate(zip(source_node_list, target_node_list, target_neg_list, lines)):
+    edge = open("under300.txt", "r")
+    lines = edge.readlines()
+    total_latency = 0
+    for line in lines:
         neighbors_list = list(map(int, line.strip().split(" ")))
         count = len(neighbors_list)
         neighbors = torch.tensor(neighbors_list)
@@ -283,29 +322,14 @@ def inference():
         x_sub[:count] = data.x[neighbors]
 
         adj_t_sub = data.adj_t[neighbors][:, neighbors]
-    
-        src_i = neighbors_list.index(src)
-        dst_i = neighbors_list.index(dst)
-        neg_i = neighbors_list.index(neg)
 
         x_sub = x_sub.to(device)
         adj_t_sub = adj_t_sub.to(device)
         t1 = time.time()
         out = model(x_sub, adj_t_sub)
         total_latency += (time.time() - t1)
-        pos_preds += [predictor(out[src_i], out[dst_i]).cpu()]
-        neg_preds += [predictor(out[src_i], out[neg_i]).cpu()]
 
-    pos_pred = torch.cat(pos_preds, dim=0)
-    neg_pred = torch.cat(neg_preds, dim=0).view(-1, 1)
-
-    test_acc = evaluator.eval({
-        'y_pred_pos': pos_pred,
-        'y_pred_neg': neg_pred,
-    })['mrr_list'].mean().item()
-    print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))
 
 def remap_neighbors():
     mapping = open("new_index.txt", "r")
@@ -329,42 +353,65 @@ def remap_neighbors():
     three_hop.close()
     three_hop_remapped.close()
 
-def save_neighbors():
+def save_selected_pairs():
     dataset = PygLinkPropPredDataset(name='ogbl-citation2',
                                      transform=T.ToSparseTensor())
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
     split_edge = dataset.get_edge_split()
 
-    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
-    source_node = set(source_node_list)
-    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
-    target_node = set(target_node_list)
-    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
-    target_neg = set(target_neg_list)
-    nodes = source_node.union(target_node)
-    nodes = list(nodes.union(target_neg))
-    nodes.sort()
+    num_nodes = 2927963
+    sorted_degree_path = "sorted_degree.txt"
 
+    # Save sorted/reverse sorted degree
+    # degree = []
+    # for i in range(num_nodes):
+    #     degree.append( (i, data.adj_t[i].nnz()) )
+
+    # degree.sort(key = lambda degree:degree[1], reverse=True)
+    # save_raw("sorted_degree.txt", degree, num_nodes)
+
+    sort = open("sorted_degree.txt", "r")
+    sort_lines = sort.readlines()
+    deg = {}
+    for line in sort_lines:
+        idx, degree = list(map(int, line.strip().split(" ")))
+        deg[idx] = degree
+
+    edge_deg = []
+    for (src, dst) in zip(split_edge['test']['source_node'].numpy(), split_edge['test']['target_node'].numpy()):
+        edge_deg.append( (src, dst, max(deg[src], deg[dst])))
+
+    edge_deg.sort(key = lambda degree:degree[2], reverse=True)
+    edge_sort = open("sorted_degree_edge.txt", "w")
+    for edge in edge_deg:
+        print(" ".join(list(map(str,edge))), file=edge_sort)
+
+def save_neighbors():
+    dataset = PygLinkPropPredDataset(name='ogbl-citation2',
+                                     transform=T.ToSparseTensor())
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
     adj = data.adj_t.set_diag()
     print(adj)
-    two_hop = adj[nodes].matmul(adj)
-    print(two_hop)
-    three_hop = two_hop.matmul(adj)
-    print(three_hop)
 
-    out = open("three-hop.txt", "w")
-    for (src, dst, neg) in zip(source_node_list, target_node_list, target_neg_list):
-        src_i = nodes.index(src)
-        dst_i = nodes.index(dst)
-        neg_i = nodes.index(neg)
-        neighbors = set(map(int, three_hop[src_i].coo()[1].numpy()))
-        neighbors = neighbors.union(set(map(int, three_hop[dst_i].coo()[1].numpy())))
-        neighbors = neighbors.union(set(map(int, three_hop[neg_i].coo()[1].numpy())))
-        neighbors_list = list(neighbors)
-        neighbors_list.sort()
-        nlist = list(map(str, neighbors_list))
-        print(" ".join(nlist), file=out)
+    sort = open("sorted_degree_edge.txt", "r")
+    sort_lines = sort.readlines()
+    threshold = 300
+    selected = []
+    for line in sort_lines:
+        src, dst, degree = list(map(int, line.strip().split(" ")))
+        if degree <= threshold and len(selected) < 200:
+            print(degree)
+            selected.append(src)
+            selected.append(dst)
+        if len(selected) == 200:
+            break
+
+    under = open("under300.txt", "w")
+    for idx in selected:
+        neighbors = list(map(str, adj[idx].coo()[1].numpy()))
+        print(" ".join(neighbors), file=under)
 
 def main(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
@@ -468,7 +515,7 @@ if __name__ == "__main__":
     global num_edge_to_test
     num_edge_to_test = 2
 
-    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
+    parser = argparse.ArgumentParser(description='OGBN-ciation (GNN)')
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--log_steps', type=int, default=1)
     parser.add_argument('--use_sage', action='store_true')
@@ -487,10 +534,12 @@ if __name__ == "__main__":
     elif args.mode == 'inference':
         inference(args)
     elif args.mode == 'reorganize':
-        reorganize(args)
+        reorganize()
     elif args.mode == 'neighbor':
         save_neighbors()
-    elif args.mode == 'remapping':
-        remap_neighbors()
+    elif args.mode == 'sweep':
+        sweep()
+    elif args.mode == 'pair':
+        save_selected_pairs()
     else:
         sys.exit()
