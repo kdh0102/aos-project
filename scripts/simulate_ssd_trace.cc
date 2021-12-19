@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <numeric>
 
 #define STORAGE "/dev/nvme0n1"
 #define DATA_X "data.x"
@@ -113,7 +114,15 @@ class Trace {
     }
   }
 
-  virtual void Simulate() = 0;
+  void Simulate() {
+    std::vector<int64_t> durations;
+    for (auto& event : events) {
+      durations.push_back(EventDuration(event));
+    }
+
+    std::cout << "Total event durations(ns): " << accumulate(durations.begin(), durations.end(), 0) << std::endl;
+  }
+  virtual int64_t EventDuration(Event& event) = 0;
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
@@ -126,23 +135,30 @@ class Trace {
 
 class MolTrace : public Trace {
  public:
-  explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {}
+  explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {
+    sentence_lengths[DATA_X] = 36;
+    sentence_lengths[EDGE_ATTR] = 12;
+  }
   Event CreateEvent(std::vector<std::string> words) override {
     return MolEvent(words);
   }
 
-  void Simulate() {
+  int64_t EventDuration(Event& event) {
+    return 0;
   }
 };
 
 class ArxivTrace : public Trace {
  public:
-  explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {}
+  explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {
+    sentence_lengths[DATA_X] = 512;
+  }
   Event CreateEvent(std::vector<std::string> words) override {
     return ArxivEvent(words);
   }
 
-  void Simulate() {
+  int64_t EventDuration(Event& event) {
+    return 0;
   }
 };
 
