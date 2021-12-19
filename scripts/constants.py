@@ -5,9 +5,9 @@ SPLIT_FILES = {
 }
 
 DATA_TRACE_FILES = {
-    "x": "data.x.txt",
+    "x": "data.x.bin",
     "y": "data.y.txt",
-    "edge_attr": "data.edge_attr.txt",
+    "edge_attr": "data.edge_attr.bin",
     "edge_index": "data.edge_index.txt",
     "edge_index_row": "data.edge_index_row.txt",
     "edge_index_col": "data.edge_index_col.txt"
