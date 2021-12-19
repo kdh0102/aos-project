@@ -41,6 +41,7 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
 
         break
 
+
     important_vertex = important_vertice[0]
     index_list = { vertex : i for i, vertex in enumerate(important_vertice)}
 
@@ -74,7 +75,6 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
             if intersection < len(working_set[index_list[important_vertex]] & working_set[index_list[j]]):
                 intersection = len(working_set[index_list[important_vertex]] & working_set[index_list[j]])
                 important_vertex = j
-    
 
     for i, degree_line in enumerate(sorted_degree_lines):
         degree = list(map(int, degree_line.strip().split(" ")))
@@ -91,7 +91,7 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
     working_set_file.close()
 
     new_index_sorted = copy.copy(new_index_table)
-    new_index_sorted.sort(key = lambda new_index_sorted:new_index_sorted[1])
+    new_index_sorted.sort(key = lambda new_index_sorted:new_index_sorted[0])
 
     return new_index_table, new_index_sorted
 
@@ -165,7 +165,7 @@ def greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=
     working_set_file.close()
 
     new_index_sorted = copy.copy(new_index_table)
-    new_index_sorted.sort(key = lambda new_index_sorted:new_index_sorted[1])
+    new_index_sorted.sort(key = lambda new_index_sorted:new_index_sorted[0])
 
     return new_index_table, new_index_sorted
 

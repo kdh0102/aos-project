@@ -170,7 +170,7 @@ def reorganize():
     num_nodes = data.adj_t.size(0)
 
     sorted_degree_path = "sorted_degree.txt"
-    working_set_path = "two-hop.txt"
+    working_set_path = "adj_t.txt"
 
     # Save sorted/reverse sorted degree
     degree = []
@@ -182,14 +182,14 @@ def reorganize():
 
     threshold = 100
     use_GLIST = True
-    use_topk = True
+    use_topk = False
 
     if not use_GLIST:
         low = 10
         new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
     else:
         topk = 20
-        low = threshold - 10
+        low = 90
         new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
 
     if functionality_check(new_index_sorted, num_nodes):
@@ -199,10 +199,10 @@ def sweep():
     num_nodes = 169343
 
     sorted_degree_path = "sorted_degree.txt"
-    working_set_path = "two-hop.txt"
+    working_set_path = "adj_t.txt"
 
-    # conditions = [(100, True, 20, -1), (100, True, 100, -1), (100, False, -1, 90), (100, False, -1, 95)]
-    conditions = [(2000, False, -1, 800)]
+    conditions = [(30, False, -1, 20)]
+    # conditions = [(1000, False, -1, 950), (110, False, -1, 100)]
     for condition in conditions:
         threshold, use_topk, topk, low = condition
         if use_topk:
@@ -212,7 +212,7 @@ def sweep():
         new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
 
         if functionality_check(new_index_sorted, num_nodes):
-            save_remapped_index(filename, new_index_table)
+            save_remapped_index(filename, new_index_sorted)
         print(filename, "saved")
 
 def save_neighbors():
@@ -225,11 +225,35 @@ def save_neighbors():
 
     num_nodes = data.adj_t.size(0)
     adj = data.adj_t.set_diag()
-    save_raw("adj_t.txt", data.adj_t, num_nodes)
-    two_hop = adj.matmul(adj)
-    save_raw("two-hop.txt", two_hop, num_nodes)
+    print(adj)
+
+    split_idx = dataset.get_idx_split()
+    test_idx = list(split_idx['test'].numpy())
+    print(test_idx.index(1210))
+    
+    sort = open("sorted_degree.txt", "r")
+    sort_lines = sort.readlines()
+    threshold = 300
+    selected = []
+    for line in sort_lines:
+        idx, degree = line.strip().split(" ")
+        if int(degree) <= threshold and len(selected) < 100 and (int(idx) in test_idx):
+            print(degree)
+            selected.append(int(idx))
+        if len(selected) == 100:
+            break
+    # selected.sort()
+
+    two_hop = adj[selected].matmul(adj)
+    print(two_hop)
     three_hop = two_hop.matmul(adj)
-    save_raw("two-hop.txt", three_hop, num_nodes)
+    print(three_hop)
+
+    under = open("under300.txt", "w")
+    for idx in selected:
+        neighbors = list(map(str, adj[idx].coo()[1].numpy()))
+        print(" ".join(neighbors), file=under)
+    # save_raw("three-hop.txt", three_hop, num_nodes)
 
 def remap_neighbors():
     mapping = open("new_index.txt", "r")
@@ -240,8 +264,8 @@ def remap_neighbors():
         old_to_new[old_idx] = int(new_idx)
     mapping.close()
 
-    three_hop = open("three-hop-100.txt", "r")
-    three_hop_remapped = open("three-hop-remapped.txt", "w")
+    three_hop = open("under300.txt", "r")
+    three_hop_remapped = open("under300-remapped.txt", "w")
     lines = three_hop.readlines()
     for line in lines:
         old_neighbors = line.strip().split(" ")
