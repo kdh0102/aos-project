@@ -185,7 +185,7 @@ def reorganize():
     use_topk = False
 
     if not use_GLIST:
-        low = 10
+        low = 90
         new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
     else:
         topk = 20
@@ -201,21 +201,33 @@ def sweep():
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt"
 
-    conditions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # GLIST low
-    conditions = [(300, True, 10, -1), (100, True, 30, -1), (30, True, 100, -1)] # GLIST topk
-    contitions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # Greedy
-    
-    for condition in conditions:
-        threshold, use_topk, topk, low = condition
-        if use_topk:
-            filename = "trace_%d_top%d.txt" % (threshold, topk)
-        else:
-            filename = "trace_%d_%d.txt" % (threshold, low)
-        new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
+    use_GLIST = False
 
-        if functionality_check(new_index_sorted, num_nodes):
-            save_remapped_index(filename, new_index_sorted)
-        print(filename, "saved")
+    #conditions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # GLIST low
+    #conditions = [(300, True, 10, -1), (100, True, 30, -1), (30, True, 100, -1)] # GLIST topk
+    conditions = [(30, False, -1, 20), (100, False, -1, 60), (300, False, -1, 200)] # Greedy
+    
+    if use_GLIST:
+        for condition in conditions:
+            threshold, use_topk, topk, low = condition
+            if use_topk:
+                filename = "trace_%d_top%d.txt" % (threshold, topk)
+            else:
+                filename = "trace_%d_%d.txt" % (threshold, low)
+            new_index_table, new_index_sorted = GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, topk, low, use_topk)
+            if functionality_check(new_index_sorted, num_nodes):
+                save_remapped_index(filename, new_index_sorted)
+            print(filename, "saved")
+
+    else:
+        for condition in conditions:
+            threshold, use_topk, topk, low = condition
+            filename = "trace_%d_%d_greedy.txt" % (threshold, low)
+            new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
+
+            if functionality_check(new_index_sorted, num_nodes):
+                save_remapped_index(filename, new_index_sorted)
+                print(filename, "saved")
 
 def save_neighbors():
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
