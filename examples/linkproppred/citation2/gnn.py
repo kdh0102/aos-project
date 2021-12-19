@@ -176,25 +176,8 @@ def test(model, predictor, data, split_edge, evaluator, batch_size):
     return -1, -1, test_mrr
     SparseTensor(row=[], col=[], sparse_sizes=(1, 2))
 
-@torch.no_grad()
-def inference():
-    parser = argparse.ArgumentParser(description='OGBL-Citation2 (GNN)')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--log_steps', type=int, default=1)
-    parser.add_argument('--use_sage', action='store_true')
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=256)
-    parser.add_argument('--dropout', type=float, default=0)
-    parser.add_argument('--batch_size', type=int, default=64 * 1024)
-    parser.add_argument('--lr', type=float, default=0.0005)
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--eval_steps', type=int, default=1)
-    parser.add_argument('--runs', type=int, default=10)
-    args = parser.parse_args()
-    print(args)
-
-    # device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
-    device = 'cpu'
+def reorganize(args):
+    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device)
 
     dataset = PygLinkPropPredDataset(name='ogbl-citation2',
@@ -203,23 +186,7 @@ def inference():
     data.adj_t = data.adj_t.to_symmetric()
     split_edge = dataset.get_edge_split()
 
-    '''source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
-    source_node = set(source_node_list)
-    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
-    target_node = set(target_node_list)
-    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
-    target_neg = set(target_neg_list)
-    nodes = source_node.union(target_node)
-    nodes = list(nodes.union(target_neg))
-    nodes.sort()'''
-
     num_nodes = data.adj_t.size(0)
-    # save working_set (adj)
-    '''print("Start saving adj_t")
-    adj = data.adj_t.set_diag()
-    save_raw("adj_t.txt", data.adj_t, num_nodes)'''
-    #two_hop = adj.matmul(adj)
-    #save_raw("two-hop.txt", two_hop, num_nodes)
 
     # Reorganize code
     sorted_degree_path = "sorted_degree.txt"
@@ -250,30 +217,22 @@ def inference():
         print("Saving")
         save_new_graph(data, new_index_table, new_index_sorted, num_nodes)
 
+@torch.no_grad()
+def inference():
+    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device)
 
-    # save 3-hop neighbors
-    # adj = data.adj_t.set_diag()
-    # print(adj)
-    # two_hop = adj[nodes].matmul(adj)
-    # print(two_hop)
-    # three_hop = two_hop.matmul(adj)
-    # print(three_hop)
+    dataset = PygLinkPropPredDataset(name='ogbl-citation2',
+                                     transform=T.ToSparseTensor())
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_edge = dataset.get_edge_split()
 
-    # out = open("three-hop.txt", "w")
-    # for (src, dst, neg) in zip(source_node_list, target_node_list, target_neg_list):
-    #     src_i = nodes.index(src)
-    #     dst_i = nodes.index(dst)
-    #     neg_i = nodes.index(neg)
-    #     neighbors = set(map(int, three_hop[src_i].coo()[1].numpy()))
-    #     neighbors = neighbors.union(set(map(int, three_hop[dst_i].coo()[1].numpy())))
-    #     neighbors = neighbors.union(set(map(int, three_hop[neg_i].coo()[1].numpy())))
-    #     neighbors_list = list(neighbors)
-    #     neighbors_list.sort()
-    #     nlist = list(map(str, neighbors_list))
-    #     print(" ".join(nlist), file=out)
-    # sys.exit()
+    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
+    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
+    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
 
-    '''predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
+    predictor = LinkPredictor(args.hidden_channels, args.hidden_channels, 1,
                               args.num_layers, args.dropout).to(device)
     if args.use_sage:
         model = SAGE(data.num_features, args.hidden_channels,
@@ -340,25 +299,67 @@ def inference():
     })['mrr_list'].mean().item()
     print("1-node inference acc: %.5f" % test_acc)
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))'''
+    print("1-node inference per node avg latency: %.5fs" % (total_latency/num_edge_to_test))
 
+def remap_neighbors():
+    mapping = open("new_index.txt", "r")
+    lines = mapping.readlines()
+    old_to_new = {}
+    for old_idx, line in enumerate(lines):
+        new_idx = line.strip()
+        old_to_new[old_idx] = int(new_idx)
+    mapping.close()
 
-def main():
-    parser = argparse.ArgumentParser(description='OGBL-Citation2 (GNN)')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--log_steps', type=int, default=1)
-    parser.add_argument('--use_sage', action='store_true')
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=256)
-    parser.add_argument('--dropout', type=float, default=0)
-    parser.add_argument('--batch_size', type=int, default=64 * 1024)
-    parser.add_argument('--lr', type=float, default=0.0005)
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--eval_steps', type=int, default=1)
-    parser.add_argument('--runs', type=int, default=10)
-    args = parser.parse_args()
-    print(args)
+    three_hop = open("three-hop-100.txt", "r")
+    three_hop_remapped = open("three-hop-remapped.txt", "w")
+    lines = three_hop.readlines()
+    for line in lines:
+        old_neighbors = line.strip().split(" ")
+        new_neighbors = []
+        for neighbor in old_neighbors:
+            new_neighbors.append(str(old_to_new[int(neighbor)]))
+        print(" ".join(new_neighbors), file=three_hop_remapped)
+    three_hop.close()
+    three_hop_remapped.close()
 
+def save_neighbors():
+    dataset = PygLinkPropPredDataset(name='ogbl-citation2',
+                                     transform=T.ToSparseTensor())
+    data = dataset[0]
+    data.adj_t = data.adj_t.to_symmetric()
+    split_edge = dataset.get_edge_split()
+
+    source_node_list = split_edge['test']['source_node'].numpy()[:num_edge_to_test]
+    source_node = set(source_node_list)
+    target_node_list = split_edge['test']['target_node'].numpy()[:num_edge_to_test]
+    target_node = set(target_node_list)
+    target_neg_list = split_edge['test']['target_node_neg'].numpy()[:num_edge_to_test][:, 0]
+    target_neg = set(target_neg_list)
+    nodes = source_node.union(target_node)
+    nodes = list(nodes.union(target_neg))
+    nodes.sort()
+
+    adj = data.adj_t.set_diag()
+    print(adj)
+    two_hop = adj[nodes].matmul(adj)
+    print(two_hop)
+    three_hop = two_hop.matmul(adj)
+    print(three_hop)
+
+    out = open("three-hop.txt", "w")
+    for (src, dst, neg) in zip(source_node_list, target_node_list, target_neg_list):
+        src_i = nodes.index(src)
+        dst_i = nodes.index(dst)
+        neg_i = nodes.index(neg)
+        neighbors = set(map(int, three_hop[src_i].coo()[1].numpy()))
+        neighbors = neighbors.union(set(map(int, three_hop[dst_i].coo()[1].numpy())))
+        neighbors = neighbors.union(set(map(int, three_hop[neg_i].coo()[1].numpy())))
+        neighbors_list = list(neighbors)
+        neighbors_list.sort()
+        nlist = list(map(str, neighbors_list))
+        print(" ".join(nlist), file=out)
+
+def main(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
     # device = 'cpu'
     device = torch.device(device)
@@ -405,7 +406,7 @@ def main():
         adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
         data.adj_t = adj_t
 
-    #np.savetxt('embedding.txt', data.x.numpy())
+    # np.savetxt('embedding.txt', data.x.numpy())
     #np.savetxt('adjacent_row.txt', data.adj_t.coo()[0].numpy(), fmt='%i')
     #np.savetxt('adjacent_col.txt', data.adj_t.coo()[1].numpy(), fmt='%i')
     #np.savetxt('train_idx_source.txt', split_edge['train']['source_node'].numpy(), fmt='%i')
@@ -459,5 +460,30 @@ def main():
 if __name__ == "__main__":
     global num_edge_to_test
     num_edge_to_test = 2
-    #main()
-    inference()
+
+    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GNN)')
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--log_steps', type=int, default=1)
+    parser.add_argument('--use_sage', action='store_true')
+    parser.add_argument('--num_layers', type=int, default=3)
+    parser.add_argument('--hidden_channels', type=int, default=256)
+    parser.add_argument('--dropout', type=float, default=0.5)
+    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--epochs', type=int, default=500)
+    parser.add_argument('--runs', type=int, default=10)
+    parser.add_argument('--mode', type=str, default="inference")
+    args = parser.parse_args()
+    print(args)
+
+    if args.mode == 'original':
+        main(args)
+    elif args.mode == 'inference':
+        inference(args)
+    elif args.mode == 'reorganize':
+        reorganize(args)
+    elif args.mode == 'neighbor':
+        save_neighbors()
+    elif args.mode == 'remapping':
+        remap_neighbors()
+    else:
+        sys.exit()
