@@ -62,16 +62,16 @@ def get_blk_addr(blkevents):
 
     return blk_addrs
 
-def plot_lba_heatmap(blkevents, plot_name):
+def plot_lba_heatmap(blkevents):
     fig, ax = plt.subplots()
     ax.grid(axis='y', linestyle='--')
     ax.set_axisbelow(True)
     ax.plot(get_timestamps(blkevents), get_blk_addr(blkevents), marker='o', color="#5cb85c", linestyle="", markersize=2)
     
-    ax.set_ylabel('Latency (ms)', fontsize=20, fontweight='bold')
+    ax.set_ylabel('Memory Address (Byte)', fontsize=20, fontweight='bold')
     ax.set_xlabel('Access Time(ms)', fontsize=20, fontweight='bold')
 
-    plt.savefig(f"lba_heatmap_{plot_name}.eps", format="eps", bbox_inches='tight')
+    plt.savefig(f"lba_heatmap.eps", format="eps", bbox_inches='tight')
 
 
 if __name__ == "__main__":
@@ -81,4 +81,4 @@ if __name__ == "__main__":
 
     file_name = sys.argv[1]
     blkevents = parse_blktrace(file_name)
-    plot_lba_heatmap(blkevents, file_name)
+    plot_lba_heatmap(blkevents)
