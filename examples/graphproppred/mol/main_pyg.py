@@ -99,8 +99,9 @@ def save_data(dataset, base_path = Path(".")):
     out = open(base_path / 'data.x.bin', "wb")
     for embedding in dataset.data.x:
         for val in embedding:
-            data = struct.pack("i", val)
+            data = struct.pack("f", val)
             out.write(data)
+        out.write(b"\n")
     out.close()
 
     out = open(base_path / 'data.edge_attr.bin', "wb")
@@ -108,6 +109,7 @@ def save_data(dataset, base_path = Path(".")):
         for val in embedding:
             data = struct.pack("i", val)
             out.write(data)
+        out.write(b"\n")
     out.close()
 
     # np.savetxt(base_path / 'data.x.txt', dataset.data.x.numpy(), fmt='%10.5f')
