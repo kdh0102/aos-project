@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <chrono>
 
 #include <iostream>
 #include <fstream>
@@ -34,9 +35,7 @@ void removeDupWord(std::string str, std::vector<std::string>& words) {
   }
 }
 
-struct Event {};
-
-struct MolEvent : Event {
+struct Event {
   int graph_idx;
   int node_start;
   int node_count;
@@ -44,6 +43,10 @@ struct MolEvent : Event {
   int edge_count;
   int y_value;
 
+  std::vector<int> neighbors;
+};
+
+struct MolEvent : Event {
   MolEvent(std::vector<std::string> words) {
     if (words.size() != 6) {
       std::cout << "Check Mol event format." << std::endl;
@@ -59,8 +62,6 @@ struct MolEvent : Event {
 };
 
 struct ArxivEvent : Event {
-  std::vector<int> neighbors;
-
   ArxivEvent(std::vector<std::string> words) {
     for (auto& word : words) {
       neighbors.push_back(std::stoi(word));
@@ -70,10 +71,10 @@ struct ArxivEvent : Event {
 
 struct DataFile {
   int fd;
-  char * mmap_pointer;
+  int * mmap_pointer;
   size_t len;
 
-  explicit DataFile(int fd = -1, char * mmap_pointer = NULL, size_t len = 0)
+  explicit DataFile(int fd = -1, int * mmap_pointer = NULL, size_t len = 0)
     : fd(fd), mmap_pointer(mmap_pointer), len(len) {}
 };
 
@@ -99,7 +100,7 @@ class Trace {
           std::cout << "file stat open fails." << std::endl;
           exit(-1);
         }
-        char *map = static_cast<char*>(mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0));
+        int *map = static_cast<int *>(mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0));
         data_files[file] = DataFile(fd, map, fileInfo.st_size);
       } else {
         std::cout << file + " does not exist." << std::endl;
@@ -136,29 +137,48 @@ class Trace {
 class MolTrace : public Trace {
  public:
   explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {
-    sentence_lengths[DATA_X] = 36;
-    sentence_lengths[EDGE_ATTR] = 12;
+    sentence_lengths[DATA_X] = 9;
+    sentence_lengths[EDGE_ATTR] = 3;
   }
   Event CreateEvent(std::vector<std::string> words) override {
     return MolEvent(words);
   }
 
   int64_t EventDuration(Event& event) {
-    return 0;
+    MolEvent* mol_event = static_cast<MolEvent *>(&event);
+    int c;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = mol_event->node_start; i < mol_event->node_start + mol_event->node_count; ++i) {
+      c = data_files[DATA_X].mmap_pointer[i];
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
   }
 };
 
 class ArxivTrace : public Trace {
  public:
   explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {
-    sentence_lengths[DATA_X] = 512;
+    sentence_lengths[DATA_X] = 128;
   }
   Event CreateEvent(std::vector<std::string> words) override {
     return ArxivEvent(words);
   }
 
   int64_t EventDuration(Event& event) {
-    return 0;
+    int c;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for (auto& neighbor : event.neighbors) {
+      for (int i = neighbor * sentence_lengths[DATA_X]; i < (neighbor + 1) * sentence_lengths[DATA_X]; ++i) {
+        c = data_files[DATA_X].mmap_pointer[i];
+      }
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
   }
 };
 
@@ -191,6 +211,7 @@ int main(int argc, char** argv) {
 
   std::string trace_file = argv[1];
   std::string dataset_type = argv[2];
+  // Make sure you pass trailing slash.
   std::string data_file_path = argv[3];
 
   if (dataset_type == "mol") {
