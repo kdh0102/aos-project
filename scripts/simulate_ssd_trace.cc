@@ -5,12 +5,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <chrono>
 
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <string>
 #include <map>
+#include <numeric>
 
 #define STORAGE "/dev/nvme0n1"
 #define DATA_X "data.x"
@@ -33,9 +35,7 @@ void removeDupWord(std::string str, std::vector<std::string>& words) {
   }
 }
 
-struct Event {};
-
-struct MolEvent : Event {
+struct Event {
   int graph_idx;
   int node_start;
   int node_count;
@@ -43,6 +43,10 @@ struct MolEvent : Event {
   int edge_count;
   int y_value;
 
+  std::vector<int> neighbors;
+};
+
+struct MolEvent : Event {
   MolEvent(std::vector<std::string> words) {
     if (words.size() != 6) {
       std::cout << "Check Mol event format." << std::endl;
@@ -58,8 +62,6 @@ struct MolEvent : Event {
 };
 
 struct ArxivEvent : Event {
-  std::vector<int> neighbors;
-
   ArxivEvent(std::vector<std::string> words) {
     for (auto& word : words) {
       neighbors.push_back(std::stoi(word));
@@ -69,10 +71,10 @@ struct ArxivEvent : Event {
 
 struct DataFile {
   int fd;
-  char * mmap_pointer;
+  int * mmap_pointer;
   size_t len;
 
-  explicit DataFile(int fd = -1, char * mmap_pointer = NULL, size_t len = 0)
+  explicit DataFile(int fd = -1, int * mmap_pointer = NULL, size_t len = 0)
     : fd(fd), mmap_pointer(mmap_pointer), len(len) {}
 };
 
@@ -98,12 +100,13 @@ class Trace {
           std::cout << "file stat open fails." << std::endl;
           exit(-1);
         }
-        char *map = static_cast<char*>(mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0));
+        int *map = static_cast<int *>(mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0));
         data_files[file] = DataFile(fd, map, fileInfo.st_size);
       } else {
         std::cout << file + " does not exist." << std::endl;
       }
     }
+    buffer=(long*) malloc(1024 * 1024 * 1024);
   }
 
   ~Trace() {
@@ -111,12 +114,22 @@ class Trace {
       close(item.second.fd);
       munmap(item.second.mmap_pointer, item.second.len);
     }
+    free(buffer);
   }
 
-  virtual void Simulate() = 0;
+  void Simulate() {
+    std::vector<int64_t> durations;
+    for (auto& event : events) {
+      durations.push_back(EventDuration(event));
+    }
+
+    std::cout << "Total event durations(ns): " << accumulate(durations.begin(), durations.end(), 0) << std::endl;
+  }
+  virtual int64_t EventDuration(Event& event) = 0;
   virtual Event CreateEvent(std::vector<std::string> words) = 0;
 
  protected:
+  long *buffer;
   std::vector<Event> events;
   // Save data info
   std::map<std::string, DataFile> data_files;
@@ -126,23 +139,50 @@ class Trace {
 
 class MolTrace : public Trace {
  public:
-  explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {}
+  explicit MolTrace(std::string data_file_path) : Trace(data_file_path) {
+    sentence_lengths[DATA_X] = 9;
+    sentence_lengths[EDGE_ATTR] = 3;
+  }
   Event CreateEvent(std::vector<std::string> words) override {
     return MolEvent(words);
   }
 
-  void Simulate() {
+  int64_t EventDuration(Event& event) {
+    MolEvent* mol_event = static_cast<MolEvent *>(&event);
+    int c;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    lseek(data_files[DATA_X].fd, (event.node_start * sentence_lengths[DATA_X]) * 4, SEEK_SET);
+    read(data_files[DATA_X].fd, buffer, (event.node_count * sentence_lengths[DATA_X]) * 4);
+
+    lseek(data_files[EDGE_ATTR].fd, (event.edge_start * sentence_lengths[EDGE_ATTR]) * 4, SEEK_SET);
+    read(data_files[EDGE_ATTR].fd, buffer, (event.edge_count * sentence_lengths[EDGE_ATTR]) * 4);
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
   }
 };
 
 class ArxivTrace : public Trace {
  public:
-  explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {}
+  explicit ArxivTrace(std::string data_file_path) : Trace(data_file_path) {
+    sentence_lengths[DATA_X] = 128;
+  }
   Event CreateEvent(std::vector<std::string> words) override {
     return ArxivEvent(words);
   }
 
-  void Simulate() {
+  int64_t EventDuration(Event& event) {
+    int c;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for (auto& neighbor : event.neighbors) {
+      lseek(data_files[DATA_X].fd, neighbor * sentence_lengths[DATA_X] * 4, SEEK_SET);
+      read(data_files[DATA_X].fd, buffer, sentence_lengths[DATA_X] * 4);
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
   }
 };
 
@@ -175,6 +215,7 @@ int main(int argc, char** argv) {
 
   std::string trace_file = argv[1];
   std::string dataset_type = argv[2];
+  // Make sure you pass trailing slash.
   std::string data_file_path = argv[3];
 
   if (dataset_type == "mol") {

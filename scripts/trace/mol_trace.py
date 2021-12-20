@@ -46,11 +46,14 @@ class MolTrace(Trace):
     @timer
     def _iterate_event(self, event):
         # Read node.x file
-        self.handler_x.seek(event.node_start * self.len_x)
-        self.data_x = self.handler_x.read(event.node_count * self.len_x)
+        # self.handler_x.seek(event.node_start * self.len_x)
+        # self.data_x = self.handler_x.read(event.node_count * self.len_x)
 
-        self.handler_edge_attr.seek(event.edge_start * self.len_edge_attr)
-        self.data_edge_attr = self.handler_edge_attr.read(event.edge_count * self.len_edge_attr)
+        # self.handler_edge_attr.seek(event.edge_start * self.len_edge_attr)
+        # self.data_edge_attr = self.handler_edge_attr.read(event.edge_count * self.len_edge_attr)
+
+        self.data_x = self.handler_x[event.node_start * 36: (event.node_start + event.node_count) * 36]
+        self.data_edge_attr = self.handler_edge_attr[event.edge_start * 12: (event.edge_start + event.edge_count) * 12]
 
 
 
