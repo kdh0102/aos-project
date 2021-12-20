@@ -194,13 +194,13 @@ def reorganize(args):
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt" 
 
-    threshold = 1000
-    use_GLIST = True
-    use_topk = True
+    threshold = 30
+    use_GLIST = False
+    use_topk = False
 
     print("Started Reorganization")
     if not use_GLIST:
-        low = 100
+        low = 20
         new_index_table, new_index_sorted = greedy_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold, low)
     else:
         topk = 20
@@ -370,9 +370,21 @@ def save_selected_pairs():
                                      transform=T.ToSparseTensor())
     data = dataset[0]
     data.adj_t = data.adj_t.to_symmetric()
+    num_nodes = 2927963
+
+    # ## save embedding
+    # out = open("data.x.bin", "wb")
+    # print(data.x.size())
+    # for embedding in data.x:
+    #     for val in embedding:
+    #         data = struct.pack("f", val)
+    #         out.write(data)
+    #     out.write(b"\n")
+    # out.close()
+
     split_edge = dataset.get_edge_split()
 
-    num_nodes = 2927963
+    
     sorted_degree_path = "sorted_degree.txt"
 
     # Save sorted/reverse sorted degree
@@ -546,7 +558,7 @@ if __name__ == "__main__":
     elif args.mode == 'inference':
         inference(args)
     elif args.mode == 'reorganize':
-        reorganize()
+        reorganize(args)
     elif args.mode == 'neighbor':
         save_neighbors()
     elif args.mode == 'sweep':
