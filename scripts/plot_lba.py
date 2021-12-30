@@ -1,6 +1,8 @@
 import sys
 from dataclasses import dataclass
 from matplotlib import pyplot as plt
+from pathlib import Path
+
 
 @dataclass
 class BlkEvent:
@@ -11,7 +13,6 @@ class BlkEvent:
     start_blk: int
     num_blk: int
     is_python: bool
-
 
     @classmethod
     def from_items(cls, items):
@@ -32,6 +33,7 @@ def is_end_of_trace(line):
     else:
         return False
 
+
 def parse_blktrace(file_name):
     blkevents = []
     with open(file_name, "r") as f:
@@ -42,11 +44,12 @@ def parse_blktrace(file_name):
             items = [item for item in line.split(" ") if item]
 
             # check blktrace event
-            if items[5] != "D" or items[6] != "R":
+            if items[5] != "D" or items[6] != "R" or "python" not in items[10]:
                 continue
-            
+
             blkevents.append(BlkEvent.from_items(items))
     return blkevents
+
 
 def get_timestamps(blkevents):
     timestamps = []
@@ -55,6 +58,7 @@ def get_timestamps(blkevents):
 
     return timestamps
 
+
 def get_blk_addr(blkevents):
     blk_addrs = []
     for blkevent in blkevents:
@@ -62,23 +66,28 @@ def get_blk_addr(blkevents):
 
     return blk_addrs
 
-def plot_lba_heatmap(blkevents):
+
+def plot_lba_heatmap(blkevents, file_name):
     fig, ax = plt.subplots()
     ax.grid(axis='y', linestyle='--')
     ax.set_axisbelow(True)
     ax.plot(get_timestamps(blkevents), get_blk_addr(blkevents), marker='o', color="#5cb85c", linestyle="", markersize=2)
-    
+
     ax.set_ylabel('Memory Address (Byte)', fontsize=20, fontweight='bold')
     ax.set_xlabel('Access Time(ms)', fontsize=20, fontweight='bold')
 
-    plt.savefig(f"lba_heatmap.eps", format="eps", bbox_inches='tight')
+    plt.savefig(f"{file_name.parent}/lba_heatmap_{file_name.name}.png", bbox_inches='tight')
+    plt.clf()
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Please pass the blktrace file name.")
-        raise FileNotFoundError
+        print("Please pass trace path.")
+        exit(0)
 
-    file_name = sys.argv[1]
-    blkevents = parse_blktrace(file_name)
-    plot_lba_heatmap(blkevents)
+    trace_path = Path(sys.argv[1])
+
+    for file_name in trace_path.iterdir():
+        if file_name.is_file() and ".eps" not in file_name.name:
+            blkevents = parse_blktrace(file_name)
+            plot_lba_heatmap(blkevents, file_name)
