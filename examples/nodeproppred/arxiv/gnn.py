@@ -18,6 +18,7 @@ import copy
 from cupy.cuda import nvtx
 from reorganize import *
 from save_features import *
+import random
 
 def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
              add_self_loops=True, dtype=None):
@@ -201,11 +202,11 @@ def sweep():
     sorted_degree_path = "sorted_degree.txt"
     working_set_path = "adj_t.txt"
 
-    use_GLIST = False
-
-    #conditions = [(30, False, -1, 20), (100, False, -1, 90), (300, False, -1, 290)] # GLIST low
-    #conditions = [(300, True, 10, -1), (100, True, 30, -1), (30, True, 100, -1)] # GLIST topk
-    conditions = [(30, False, -1, 20), (100, False, -1, 60), (300, False, -1, 200)] # Greedy
+    use_GLIST = True
+    conditions = [(300, False, -1, 200), (300, False, -1, 100), (300, False, -1, 50)]
+    # conditions = [(30, False, -1, 20), (100, False, -1, 60), (300, False, -1, 200)] # GLIST low
+    # conditions = [(1000, True, 60, -1), (300, True, 200, -1), (100, True, 600, -1)] # GLIST topk
+    # conditions = [(30, False, -1, 20), (100, False, -1, 60), (300, False, -1, 200)] # Greedy
     
     if use_GLIST:
         for condition in conditions:
@@ -230,6 +231,7 @@ def sweep():
                 print(filename, "saved")
 
 def save_neighbors():
+    print("save neighbors")
     dataset = PygNodePropPredDataset(name='ogbn-arxiv',
                                      transform=T.ToSparseTensor())
 
@@ -246,23 +248,25 @@ def save_neighbors():
     
     sort = open("sorted_degree.txt", "r")
     sort_lines = sort.readlines()
-    threshold = 300
+    threshold = 30
     selected = []
     for line in sort_lines:
         idx, degree = line.strip().split(" ")
-        if int(degree) <= threshold and len(selected) < 100 and (int(idx) in test_idx):
-            print(degree)
+        if int(degree) >= threshold and (int(idx) in test_idx):
             selected.append(int(idx))
-        if len(selected) == 100:
+        if int(degree) < threshold:
             break
+    print(len(selected))
+    selected = random.sample(selected, k=100)
+    print(selected)
     # selected.sort()
 
-    two_hop = adj[selected].matmul(adj)
-    print(two_hop)
-    three_hop = two_hop.matmul(adj)
-    print(three_hop)
+    # two_hop = adj[selected].matmul(adj)
+    # print(two_hop)
+    # three_hop = two_hop.matmul(adj)
+    # print(three_hop)
 
-    under = open("under300.txt", "w")
+    under = open("over30.txt", "w")
     for idx in selected:
         neighbors = list(map(str, adj[idx].coo()[1].numpy()))
         print(" ".join(neighbors), file=under)
@@ -318,9 +322,8 @@ def inference(args):
     
     ## load 3-hop neighbors and run test
     data = data.to(device)
-    three_hop = open("three-hop.txt", "r")
+    three_hop = open("over30.txt", "r")
     lines = three_hop.readlines()
-    y_preds = []
     
     total_latency = 0.0
     for idx, (node, line) in enumerate(zip(split_idx['test'], lines)):
@@ -333,10 +336,6 @@ def inference(args):
         x_sub[:count] = data.x[neighbors]
 
         adj_t_sub = data.adj_t[neighbors][:, neighbors]
-    
-        node_idx = int(node.numpy())
-        internal_idx = neighbors_list.index(node_idx)
-
         nvtx.RangePush("Start One Node")
         x_sub = x_sub.to(device)
         adj_t_sub = adj_t_sub.to(device)
@@ -344,19 +343,8 @@ def inference(args):
         out = model(x_sub, adj_t_sub)
         total_latency += (time.time() - t1)
         nvtx.RangePop()
-        nvtx.RangePush("Argmax")
-        y_preds.append(int(out.argmax(dim=-1, keepdim=True)[internal_idx].cpu().numpy()))
-        nvtx.RangePop()
-        if idx == 99:
-            break
-
-    test_acc = evaluator.eval({
-        'y_true': data.y[split_idx['test'][:100]],
-        'y_pred': torch.tensor(y_preds).view(-1, 1),
-    })['acc']
-    print("1-node inference acc: %.5f" % test_acc)
+        
     print("1-node inference total latency: %.5fs" % (total_latency))
-    print("1-node inference per node avg latency: %.5fs" % (total_latency/100))
 
 def main(args):
     device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
@@ -414,6 +402,15 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # sort = open("sorted_degree.txt", "r")
+    # sort_lines = sort.readlines()
+    # summ = 0
+    # for line in sort_lines:
+    #     idx, degree = list(map(int, line.strip().split(" ")))
+    #     summ += degree
+    # print(summ/len(sort_lines))
+    # sys.exit()
+
     global total_nodes
     total_nodes = 169343
 

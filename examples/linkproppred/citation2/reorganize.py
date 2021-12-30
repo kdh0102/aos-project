@@ -33,7 +33,7 @@ def GLIST_algorithm(sorted_degree_path, working_set_path, num_nodes, threshold=1
                 k = k+1
                 continue
         else:
-            if degree[1] > low:
+            if degree[1] >= low:
                 neighbors_list = list(map(int, working_set_lines[degree[0]].strip().split(" ")))
                 important_vertice.append(degree[0])
                 working_set.append(set(neighbors_list))    
